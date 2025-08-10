@@ -1,0 +1,6 @@
+data/
+!src/data/
+*.csv
+*.pth
+*.jsonl
+.vscode/
