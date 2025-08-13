@@ -253,9 +253,9 @@ def get_recommendations(query, model, index, coffee_df, top_k=5):
 
 if __name__ == "__main__":
     PREPROCESSED_PATH = "data/processed/test_data_8_11.csv"
-    TRAINING_DATA_PATH = "data/processed/llm-queries/synthetic_queries_np_4_1_nano.jsonl"
-    # TRAINING_DATA_PATH = "data/processed/training_data.jsonl"
-    MODEL_PATH = "data/outputs/model-weights/8-11/coffee_model_epoch_25.pth"
+    # TRAINING_DATA_PATH = "data/processed/llm-queries/synthetic_queries_np_4_1_nano.jsonl"
+    TRAINING_DATA_PATH = "data/processed/training_data.jsonl"
+    MODEL_PATH = "data/outputs/model-weights/8-11/coffee_model_epoch_11_3.pth"
 
     DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 

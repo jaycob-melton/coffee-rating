@@ -4,3 +4,4 @@ data/
 *.pth
 *.jsonl
 .vscode/
+.~lock*

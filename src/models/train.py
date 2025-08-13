@@ -100,7 +100,7 @@ def train(config):
 
     # model, loss, optimizer
     if config["model_path"]:
-        model = load_model_train(config["model_path"], numerical_dim=len(full_coffee_dataset.numerical_cols), device=device)
+        model, vocabs = load_model_train(config["model_path"], numerical_dim=len(full_coffee_dataset.numerical_cols), device=device)
     else:
         model = DualEncoder(vocabs, numerical_dim=len(full_coffee_dataset.numerical_cols)).to(device)
 
@@ -222,8 +222,9 @@ def train(config):
         checkpoint = {
             "model_state_dict": model.state_dict(),
             "vocabs": vocabs,
+            "loss": loss_info["loss"],
         }
-        torch.save(checkpoint, f"data/outputs/model-weights/8-11/coffee_model_epoch_{epoch+1}.pth")
+        torch.save(checkpoint, f"{config['save_path']}_{epoch+1}.pth")
     
     return loss_info
 
@@ -257,10 +258,11 @@ if __name__ == "__main__":
         "batch_size": 32,
         "transformer_lr": 1e-5,
         "head_lr": 1e-5,
-        "epochs": 25,
+        "epochs": 10,
         "margin": 0.2,
-        "semi_hard_mining_start_epoch": 0,
-        "model_path": "data/outputs/model-weights/8-11/coffee_model_epoch_25.pth"
+        "semi_hard_mining_start_epoch": -1,
+        "model_path": "data/outputs/model-weights/8-11/coffee_model_epoch_11.pth",
+        "save_path": "data/outputs/model-weights/8-11/coffee_model_epoch_11",
     }
 
     loss_info = train(config)
