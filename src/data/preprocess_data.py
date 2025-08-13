@@ -367,7 +367,6 @@ def preprocess_data(input_path: str, output_path: str) -> pd.DataFrame:
     is_cold = df["blind assessment"].str.contains("cold", case=False, regex=True).fillna(False)
     # Condition 2: Check if 'with milk' is not null
     has_milk = df["with milk"].notnull()
-    # Create one-hot encoded columns for test types
     # espresso cases
     df["test_method"] = np.where(
         is_espresso & ~has_milk, 
