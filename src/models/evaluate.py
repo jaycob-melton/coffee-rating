@@ -80,11 +80,11 @@ def calculate_relevance_old(query: str, coffee_row: pd.Series) -> int:
     return 0
 
 ATTRIBUTE_WEIGHTS = {
-    'origin': 3,
-    'process': 3,
-    'varietal': 3,
-    'flavor': 2,
-    'notes': 2,
+    'origin': 1,
+    'process': 1,
+    'varietal': 1,
+    'flavor': 1,
+    'notes': 1,
     'roast': 1,
     'test_method': 1
 }
@@ -244,7 +244,8 @@ def evaluate(model, test_df, vocabs, training_data_path, device, precomputed_ind
     hits_at_10 = 0
     total_queries = len(test_queries)
 
-    ndcg_scores = []
+    ndcg_5_scores = []
+    ndcg_10_scores = []
     with torch.no_grad():
         for i in tqdm(range(total_queries), desc="Evaluating Queries"):
             query = test_queries[i]
@@ -268,15 +269,19 @@ def evaluate(model, test_df, vocabs, training_data_path, device, precomputed_ind
             # Calculate ndcg
             recommendation_relevance = [calculate_relevance(query, test_df.iloc[i]) for i in top_k_indices]
 
-            ncdg_score = calculate_ndcg(recommendation_relevance, k=10)
-            ndcg_scores.append(ncdg_score)
+            ndcg_5_score = calculate_ndcg(recommendation_relevance, k=5)
+            ndcg_5_scores.append(ndcg_5_score)
+
+            ncdg_10_score = calculate_ndcg(recommendation_relevance, k=10)
+            ndcg_10_scores.append(ncdg_10_score)
 
     print(f"Total Test Queries: {total_queries}")
     print(f"Recall@1:  {hits_at_1 / total_queries:.4f}")
     print(f"Recall@5:  {hits_at_5 / total_queries:.4f}")
     print(f"Recall@10: {hits_at_10 / total_queries:.4f}")
-    print(f"NDCG@10:  {np.mean(ndcg_scores):.4f}")
-    return np.mean(ndcg_scores), hits_at_1 / total_queries, hits_at_5 / total_queries, hits_at_10 / total_queries
+    print(f"NDCG@5:  {np.mean(ndcg_5_scores):.4f}")
+    print(f"NDCG@10:  {np.mean(ndcg_10_scores):.4f}")
+    return np.mean(ndcg_10_scores), hits_at_1 / total_queries, hits_at_5 / total_queries, hits_at_10 / total_queries
 
 
 def build_search_index(model, coffee_df, vocabs, device):
@@ -337,7 +342,7 @@ if __name__ == "__main__":
     PREPROCESSED_PATH = "data/processed/test_data_8_11.csv"
     # TRAINING_DATA_PATH = "data/processed/llm-queries/synthetic_queries_np_4_1_nano.jsonl"
     TRAINING_DATA_PATH = "data/processed/training_data.jsonl"
-    MODEL_PATH = "data/outputs/model-weights/8-11/coffee_model_epoch_11_semi_hard_epoch_3_3.pth"
+    MODEL_PATH = "data/outputs/model-weights/8-11/coffee_model_epoch_11_semi_hard_3.pth"
 
     DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
