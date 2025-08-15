@@ -256,13 +256,13 @@ if __name__ == "__main__":
         "vocabs": vocabs,
         "training_data_path": TRAINING_DATA_PATH,
         "batch_size": 32,
-        "transformer_lr": 1e-5,
-        "head_lr": 1e-5,
+        "transformer_lr": 1e-6,
+        "head_lr": 1e-6,
         "epochs": 10,
         "margin": 0.2,
         "semi_hard_mining_start_epoch": -1,
-        "model_path": "data/outputs/model-weights/8-11/coffee_model_epoch_11.pth",
-        "save_path": "data/outputs/model-weights/8-11/coffee_model_epoch_11",
+        "model_path": "data/outputs/model-weights/8-11/coffee_model_epoch_11_semi_hard_3.pth",
+        "save_path": "data/outputs/model-weights/8-11/coffee_model_epoch_11_semi_hard_epoch_3",
     }
 
     loss_info = train(config)

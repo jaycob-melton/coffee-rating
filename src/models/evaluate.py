@@ -6,7 +6,7 @@ import json
 import ast
 import re
 from tqdm import tqdm
-from utils import CoffeeDataset
+from utils import CoffeeDataset, to_list
 from model import DualEncoder
 
 def load_model_inference(model_path: str, numerical_dim: int, device):
@@ -26,7 +26,7 @@ def load_model_inference(model_path: str, numerical_dim: int, device):
     return model, vocabs
 
 
-def calculate_relevance(query: str, coffee_row: pd.Series) -> int:
+def calculate_relevance_old(query: str, coffee_row: pd.Series) -> int:
     """
     Assigns a relevance score to a query based on a query
     - 2: Highly relevant (multiple key terms match)
@@ -78,6 +78,88 @@ def calculate_relevance(query: str, coffee_row: pd.Series) -> int:
     if match_percentage >= 0.50: return 2 # Medium relevance
     if match_percentage > 0: return 1   # Low relevance
     return 0
+
+ATTRIBUTE_WEIGHTS = {
+    'origin': 3,
+    'process': 3,
+    'varietal': 3,
+    'flavor': 2,
+    'notes': 2,
+    'roast': 1,
+    'test_method': 1
+}
+
+def calculate_relevance(query: str, coffee_row: pd.Series) -> int:
+
+    universal_origins = set(json.loads(open("data/universal/known_origins.json").read()))
+    universal_flavors = dict(json.loads(open("data/universal/flavor_keywords.json").read()))
+    universal_varietals = list(json.loads(open("data/universal/coffee_varietals.json").read()))
+    universal_processes = dict(json.loads(open("data/universal/process_keywords.json").read()))
+
+    universal_set = {
+        "origin": universal_origins,
+        "flavor": {flavor.lower() for flavor in universal_flavors.keys()},
+        "notes": {note.lower() for flavor in universal_flavors.values() for note in flavor},
+        "varietal": universal_varietals,
+        "process": {proc.lower() for proc in universal_processes.keys()}.union({process_name for process in universal_processes.values() for process_name in process}),
+        "roast": {"light", "medium-light", "medium", "medium-dark", "dark"},
+        "test_method": {"hot_black", "espresso_with_milk", "espresso_black", "cold_with_milk", "hot_with_milk", "cold_black"},
+    }
+
+    query = query.lower()
+
+    # --- 1. Parse the Query to find what the user is asking for ---
+    query_attributes = {}
+    total_possible_score = 0
+    
+    for attr_type, keywords in universal_set.items():
+        found_keywords = {kw for kw in keywords if re.search(r'\b' + re.escape(kw) + r'\b', query)}
+        if found_keywords:
+            query_attributes[attr_type] = found_keywords
+            total_possible_score += ATTRIBUTE_WEIGHTS[attr_type] * len(found_keywords)
+
+    if total_possible_score == 0:
+        return 0 # The query is too generic to be scored
+
+    # --- 2. Score the coffee based on how well it matches the query attributes ---
+    achieved_score = 0
+    
+    # Safely get the coffee's attributes
+    try:
+        coffee_origins = {o.lower() for o in ast.literal_eval(coffee_row.get('countries_extracted', '[]'))}
+        coffee_processes = {p.lower() for p in ast.literal_eval(coffee_row.get('process', '[]'))}
+        coffee_varietals = {v.lower() for v in ast.literal_eval(coffee_row.get('varietals', '[]'))}
+        flavor_profile = ast.literal_eval(coffee_row.get('flavor_profile', '{}'))
+        coffee_flavors = {f.lower() for f in flavor_profile.keys()}
+        coffee_notes = {note.lower() for notes in flavor_profile.values() for note in notes}
+        coffee_roast = {str(coffee_row.get('roast level', '')).lower()}
+        coffee_test_method = {str(coffee_row.get('test_method', '')).lower()}
+    except:
+        return 0 # Return 0 if coffee data is malformed
+
+    coffee_attributes = {
+        'origin': coffee_origins,
+        'process': coffee_processes,
+        'varietal': coffee_varietals,
+        'flavor': coffee_flavors,
+        "notes": coffee_notes,
+        'roast': coffee_roast,
+        'test_method': coffee_test_method
+    }
+    
+    for attr_type, query_values in query_attributes.items():
+        matches = query_values.intersection(coffee_attributes.get(attr_type, set()))
+        achieved_score += ATTRIBUTE_WEIGHTS[attr_type] * len(matches)
+        
+    # --- 3. Calculate the final relevance score (0-4) ---
+    match_percentage = achieved_score / total_possible_score
+    
+    if match_percentage >= 0.99: return 4 # Perfect
+    if match_percentage >= 0.75: return 3 # High
+    if match_percentage >= 0.50: return 2 # Medium
+    if match_percentage > 0: return 1   # 
+    return 0
+
 
 
 
@@ -255,7 +337,7 @@ if __name__ == "__main__":
     PREPROCESSED_PATH = "data/processed/test_data_8_11.csv"
     # TRAINING_DATA_PATH = "data/processed/llm-queries/synthetic_queries_np_4_1_nano.jsonl"
     TRAINING_DATA_PATH = "data/processed/training_data.jsonl"
-    MODEL_PATH = "data/outputs/model-weights/8-11/coffee_model_epoch_11_3.pth"
+    MODEL_PATH = "data/outputs/model-weights/8-11/coffee_model_epoch_11_semi_hard_epoch_3_3.pth"
 
     DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 

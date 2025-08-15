@@ -4,6 +4,7 @@ from sklearn.preprocessing import MinMaxScaler
 import re
 import argparse
 from typing import Optional
+import json
 
 known_origins = [
     'north america', 
@@ -229,7 +230,7 @@ def format_profile_for_llm(profile_dict: dict) -> str:
     return "; ".join(parts)
 
 
-COFFEE_VARIETALS = {
+COFFEE_VARIETALS = [
     # Common Arabica
     'typica', 'bourbon', 'caturra', 'catuai', 'geisha', 'gesha', 'pacamara', 
     'pacas', 'maragogipe', 'mundo novo', 'kent', 's795', 'jember', 'villa sarchi',
@@ -248,7 +249,7 @@ COFFEE_VARIETALS = {
 
     # Other Species
     'liberica', 'excelsa', 'stenophylla', 'arabica' # Include base species
-}
+]
 
 def extract_varietals(text: str) -> list:
     """
@@ -428,15 +429,31 @@ def preprocess_data(input_path: str, output_path: str) -> pd.DataFrame:
     print(f"Writing preprocessed data to {output_path}")
     df_normalized.to_csv(output_path)
     return df_normalized
+
+def dump_lists_n_dicts_json():
+    """
+    Dumps the known origins, flavor keywords, and varietals to JSON files.
+    """
+    with open("data/universal/known_origins.json", "w") as f:
+        json.dump(known_origins, f, indent=4)
+    
+    with open("data/universal/flavor_keywords.json", "w") as f:
+        json.dump(FLAVOR_KEYWORDS, f, indent=4)
+    
+    with open("data/universal/coffee_varietals.json", "w") as f:
+        json.dump(COFFEE_VARIETALS, f, indent=4)
+
+    with open("data/universal/process_keywords.json", "w") as f:
+        json.dump(PROCESS_KEYWORDS, f, indent=4)
     
 
 def main():
-    parser = argparse.ArgumentParser(description="Preprocess raw coffee review dataset for training")
-    parser.add_argument("input_file", type=str, help="Input file with existing dataset to append to")
-    parser.add_argument("output_file", type=str, help="Output file name for the dataset")
-    args = parser.parse_args()
-    preprocess_data(args.input_file, args.output_file)
-
+    # parser = argparse.ArgumentParser(description="Preprocess raw coffee review dataset for training")
+    # parser.add_argument("input_file", type=str, help="Input file with existing dataset to append to")
+    # parser.add_argument("output_file", type=str, help="Output file name for the dataset")
+    # args = parser.parse_args()
+    # preprocess_data(args.input_file, args.output_file)
+    dump_lists_n_dicts_json()
 
 if __name__ == "__main__":
     main()
