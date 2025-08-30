@@ -5,3 +5,6 @@ data/
 *.jsonl
 .vscode/
 .~lock*
+*.yml
+GithubToken.txt
+OpenAI-Token.txt

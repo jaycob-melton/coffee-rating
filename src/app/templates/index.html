@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, intial-scale=1.0">
+    <title>Coffee Recommender</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .card-enter {
+            opacity: 0;
+            transform: translateY(20px);
+            transition: opacity 0.5s ease, transform 0.5s ease;
+        }
+        .card-enter-active {
+            opacity: 1;
+            transform: translateY(0)
+        }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-800">
+
+    <div class="container mx-auto px-4 py-8 md:py-16">
+
+        <!-- Header -->
+         <header class="text-center mb-12">
+            <h1 class="text-4xl md:text-5xl font-bold text-gray-900 mb-2">Find Your Perfect Coffee</h1>
+            <p class="text-lg text-gray-600 max-w-2xl mx-auto">Describe the coffee you're dreaming of, and our AI will find the best matches for you.</p>
+         </header>
+    </div>
+
+    <!-- Search Form -->
+        <div id="search-container" class="max-w-2xl mx-auto">
+            <div class="bg-white p-6 rounded-xl shadow-lg">
+                <div class="relative">
+                    <textarea id="query-input" class="w-full p-4 pr-20 rounded-lg border border-gray-300 focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition resize-none" rows="3" placeholder="e.g., a juicy and fruity light roast from Ethiopia..."></textarea>
+                    <button id="search-button" class="absolute top-1/2 right-4 -translate-y-1/2 bg-amber-600 text-white font-semibold py-2 px-5 rounded-lg hover:bg-amber-700 transition-colors focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2">
+                        Search
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Loading Spinner -->
+        <div id="loading-spinner" class="text-center my-12 hidden">
+            <svg class="animate-spin h-8 w-8 text-amber-600 mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            <p class="mt-2 text-gray-600">Finding recommendations...</p>
+        </div>
+
+        <!-- Results Container -->
+        <div id="results-container" class="mt-12 max-w-4xl mx-auto hidden">
+             <div class="flex justify-between items-center mb-6">
+                <h2 class="text-2xl font-bold text-gray-800">Top 5 Recommendations</h2>
+                <button id="try-again-button" class="bg-gray-200 text-gray-700 font-semibold py-2 px-5 rounded-lg hover:bg-gray-300 transition-colors">
+                    New Search
+                </button>
+            </div>
+            <div id="results-grid" class="space-y-4">
+                <!-- Recommendation cards will be inserted here -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const searchContainer = document.getElementById('search-container');
+        const queryInput = document.getElementById('query-input');
+        const searchButton = document.getElementById('search-button');
+        const loadingSpinner = document.getElementById('loading-spinner');
+        const resultsContainer = document.getElementById('results-container');
+        const resultsGrid = document.getElementById('results-grid');
+        const tryAgainButton = document.getElementById('try-again-button');
+
+        // --- Event Listeners ---
+        searchButton.addEventListener('click', handleSearch);
+        queryInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                handleSearch();
+            }
+        });
+        tryAgainButton.addEventListener('click', resetUI);
+
+        // --- Functions ---
+        async function handleSearch() {
+            const query = queryInput.value.trim();
+            if (!query) {
+                alert('Please enter a description of the coffee you want.');
+                return;
+            }
+
+            // Update UI
+            searchContainer.classList.add('hidden');
+            loadingSpinner.classList.remove('hidden');
+            resultsContainer.classList.add('hidden');
+            resultsGrid.innerHTML = '';
+
+            try {
+                // API Call
+                const response = await fetch('/recommend', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ query: query })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const recommendations = await response.json();
+                displayResults(recommendations);
+
+            } catch (error) {
+                console.error('Error fetching recommendations:', error);
+                alert('Sorry, something went wrong. Please try again.');
+                resetUI();
+            } finally {
+                loadingSpinner.classList.add('hidden');
+            }
+        }
+
+        function displayResults(recommendations) {
+            resultsContainer.classList.remove('hidden');
+            
+            if (recommendations.length === 0) {
+                resultsGrid.innerHTML = '<p class="text-center text-gray-600">No recommendations found. Try a different query.</p>';
+                return;
+            }
+
+            recommendations.forEach((coffee, index) => {
+                const card = createCoffeeCard(coffee);
+                resultsGrid.appendChild(card);
+                // Staggered animation
+                setTimeout(() => {
+                    card.classList.add('card-enter-active');
+                }, index * 100);
+            });
+        }
+
+        function createCoffeeCard(coffee) {
+            const card = document.createElement('div');
+            card.className = 'bg-white p-6 rounded-xl shadow-md border border-gray-200 card-enter';
+            
+            const roastLevel = coffee['roast level'] ? `<span class="bg-amber-100 text-amber-800 text-xs font-medium mr-2 px-2.5 py-0.5 rounded-full">${coffee['roast level']}</span>` : '';
+            const origin = coffee['countries_extracted'] ? `<span class="bg-green-100 text-green-800 text-xs font-medium mr-2 px-2.5 py-0.5 rounded-full">${JSON.parse(coffee['countries_extracted'].replace(/'/g, '"')).join(', ')}</span>` : '';
+
+            card.innerHTML = `
+                <div class="flex items-start space-x-4">
+                    <div class="flex-shrink-0 h-16 w-16 bg-amber-600 rounded-lg flex items-center justify-center">
+                        <span class="text-white text-3xl font-bold">${Math.round(coffee.rating * 100)}</span>
+                    </div>
+                    <div class="flex-1">
+                        <p class="text-sm font-semibold text-gray-500">${coffee.company || 'N/A'}</p>
+                        <h3 class="text-xl font-bold text-gray-900">${coffee['coffee name'] || 'N/A'}</h3>
+                        <div class="mt-2">
+                            ${roastLevel}
+                            ${origin}
+                        </div>
+                    </div>
+                </div>
+                <p class="mt-4 text-gray-600">${coffee['bottom line'] || 'No summary available.'}</p>
+            `;
+            return card;
+        }
+
+        function resetUI() {
+            resultsContainer.classList.add('hidden');
+            resultsGrid.innerHTML = '';
+            queryInput.value = '';
+            searchContainer.classList.remove('hidden');
+            queryInput.focus();
+        }
+
+    </script>
+    
+</body>
+</html>
