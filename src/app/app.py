@@ -5,11 +5,13 @@ import faiss
 import numpy as np
 import os
 import traceback
+import ast
+import json
 
 from ..models.model import DualEncoder
 from ..models.utils import CoffeeDataset
 from ..models.evaluate import load_model_inference
-from ..models.predict import get_recommendations
+from ..models.predict import get_recommendations, build_search_index
 
 app = Flask(__name__)
 
@@ -29,8 +31,8 @@ def load_artifacts():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     
     preprocessed_path = "data/processed/preprocessed_data.csv"
-    model_path = "data/outputs/model-weights/coffee_model_epoch_11_semi_hard_3.pth"
-    faiss_path = "data/outputs/faiss_index.bin"
+    model_path = "data/outputs/model-weights/8-11/coffee_model_epoch_11_semi_hard_3.pth"
+    faiss_path = "data/outputs/faiss/faiss_index.bin"
     
     # load coffee data
     print("Loading Coffee Data...")
@@ -47,7 +49,11 @@ def load_artifacts():
         FAISS_INDEX = faiss.read_index(faiss_path)
         print(f"FAISS index loaded from {faiss_path}. Contains {FAISS_INDEX.ntotal} vectors.")
     else:
-        print("COULD NOT FIND FAISS INDEX")
+        print("COULD NOT FIND FAISS INDEX, creating index...")
+        build_search_index(MODEL, COFFEE_DF, VOCABS, device, output_path=faiss_path)
+        FAISS_INDEX = faiss.read_index(faiss_path)
+        print(f"FAISS index created and loaded. Contains {FAISS_INDEX.ntotal}) vectors.")
+
     
     print("-- Artifacts loaded sucessfully --")
     
@@ -73,25 +79,29 @@ def recommend():
         if not query:
             return jsonify({"error": "Query cannot be empty"}), 400
         
-        # # -- Perform Inference --
-        # with torch.no_grad():
-        #     # encode the user query
-        #     query_embedding = MODEL.encode_queries([query]).cpu().numpy()
-        #     faiss.normalize_L2(query_embedding)
-            
-        #     # search the faiss index for top k matches
-        #     distances, top_k_indices = FAISS_INDEX.search(query_embedding, k=5)
-            
-        #     # get results from coffee df
-        #     result_indices = top_k_indices[0]
-        #     recommendations = COFFEE_DF.iloc[result_indices]
-            
-        #     results_json = recommendations.to_dict(orient="records")
+
         print("Getting recommendations...")
         recommendations = get_recommendations(query, MODEL, FAISS_INDEX, COFFEE_DF, top_k=5)
-        print("Dumping recomendations to json...")
-        results_json = recommendations.to_dict(orient="records")
-        return jsonify(results_json)
+        recommendations.to_csv("latest_recommendations.csv", index=False)
+        valid_json_string = recommendations.to_json(orient="records")
+        results_list = json.loads(valid_json_string) # Load the clean string back to a Python list of dicts
+
+        # Now, we only need to handle the string-to-list conversion for our multi-value columns.
+        cleaned_results = []
+        list_cols = ['countries_extracted', 'process', 'varietals']
+        for record in results_list:
+            cleaned_record = record.copy() # Start with the record, which is already mostly clean
+            for col in list_cols:
+                if col in cleaned_record and isinstance(cleaned_record[col], str):
+                    try:
+                        # Safely evaluate the string representation of a list
+                        cleaned_record[col] = ast.literal_eval(cleaned_record[col])
+                    except (ValueError, SyntaxError):
+                        # If it's not a list-like string, just treat it as a single-item list
+                        cleaned_record[col] = [cleaned_record[col]] 
+            cleaned_results.append(cleaned_record)
+
+        return jsonify(cleaned_results)
     
     except Exception as e:
             # FIX: Add detailed error logging to the terminal
@@ -105,4 +115,4 @@ if __name__ == "__main__":
     # load the necessary global artifacts
     load_artifacts()
     # run app
-    app.run(debug=True, port=5000, use_reloader=False)    
+    app.run(debug=True, port=5000) #, use_reloader=False    

@@ -143,11 +143,13 @@
         }
 
         function createCoffeeCard(coffee) {
+            print("Creating card for coffee:", coffee["coffee name"]);
             const card = document.createElement('div');
             card.className = 'bg-white p-6 rounded-xl shadow-md border border-gray-200 card-enter';
             
             const roastLevel = coffee['roast level'] ? `<span class="bg-amber-100 text-amber-800 text-xs font-medium mr-2 px-2.5 py-0.5 rounded-full">${coffee['roast level']}</span>` : '';
             const origin = coffee['countries_extracted'] ? `<span class="bg-green-100 text-green-800 text-xs font-medium mr-2 px-2.5 py-0.5 rounded-full">${JSON.parse(coffee['countries_extracted'].replace(/'/g, '"')).join(', ')}</span>` : '';
+            const process = coffee['process'] ? `<span class="bg-blue-100 text-blue-800 text-xs font-medium mr-2 px-2.5 py-0.5 rounded-full">${JSON.parse(coffee['process'].replace(/'/g, '"')).join(', ')}</span>` : '';
 
             card.innerHTML = `
                 <div class="flex items-start space-x-4">
@@ -160,6 +162,7 @@
                         <div class="mt-2">
                             ${roastLevel}
                             ${origin}
+                            ${process}
                         </div>
                     </div>
                 </div>

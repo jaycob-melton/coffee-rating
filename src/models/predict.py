@@ -7,7 +7,7 @@ from .evaluate import load_model_inference
 from .utils import CoffeeDataset
 import time
 
-def build_search_index(model, coffee_df, vocabs, device):
+def build_search_index(model, coffee_df, vocabs, device, output_path="faiss_index.bin"):
     """Encodes all coffees and builds a searchable FAISS index."""
     print("Building search index for all coffees...")
     # Use the full dataset for the index
@@ -43,7 +43,7 @@ def build_search_index(model, coffee_df, vocabs, device):
     faiss.normalize_L2(all_coffee_embeddings)
     index.add(all_coffee_embeddings)
     print(f"FAISS index built with {index.ntotal} vectors.")
-    faiss.write_index(index, "faiss_index.bin")
+    faiss.write_index(index, output_path)
     return index
 
 
