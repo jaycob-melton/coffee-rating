@@ -8,4 +8,4 @@ data/
 *.yml
 GithubToken.txt
 OpenAI-Token.txt
-_pycache_
+__pycache__
