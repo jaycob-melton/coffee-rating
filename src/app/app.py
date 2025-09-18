@@ -59,6 +59,9 @@ def load_artifacts(flask_app):
     
     print("-- Artifacts loaded successfully --")
 
+
+load_artifacts(app)
+
 # -- API Routes --
 @app.route("/")
 def home():
@@ -110,7 +113,7 @@ def recommend():
 # -- Main Execution --
 if __name__ == "__main__":
     # Load artifacts into the app context before running
-    load_artifacts(app)
+    # load_artifacts(app)
     # Use reloader=False for stability with large in-memory models
     app.run(debug=True, port=5000, use_reloader=False)
 

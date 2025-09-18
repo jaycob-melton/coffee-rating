@@ -1,0 +1,25 @@
+# Git and environment files
+.git
+.gitignore
+.env
+full_env.yml
+README.md
+
+# Docker files
+Dockerfile
+.dockerignore
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Jupyter Notebooks and data analysis folders
+*.ipynb
+notebooks/
+
+# Raw data or training-specific assets
+data/processed/coffee_database.db
+data/outputs/model-weights/8-11/coffee_model_epoch_11.pth
+data/outputs/model-weights/8-11/coffee_model_epoch_11_semi_hard_epoch_3_3.pth
+src/data/
+src/features/
