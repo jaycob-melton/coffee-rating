@@ -5,6 +5,7 @@ import faiss
 import json
 import ast
 import re
+import os
 from tqdm import tqdm
 from .utils import CoffeeDataset, to_list
 from .model import DualEncoder
@@ -17,7 +18,10 @@ def load_model_inference(model_path: str, numerical_dim: int, device):
     
     vocabs = checkpoint["vocabs"]
 
-    model = DualEncoder(vocabs, numerical_dim)
+
+    local_model_path = "sbert_model"
+
+    model = DualEncoder(vocabs, numerical_dim, local_model_path)
     model.load_state_dict(checkpoint["model_state_dict"])
     model.to(device)
     model.eval()

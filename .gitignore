@@ -9,4 +9,4 @@ data/
 GithubToken.txt
 OpenAI-Token.txt
 __pycache__
-src/models/sbert_model/
+sbert_model/
