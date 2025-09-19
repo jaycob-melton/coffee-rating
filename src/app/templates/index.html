@@ -56,7 +56,7 @@
         <!-- Results Container -->
         <div id="results-container" class="mt-12 max-w-4xl mx-auto hidden">
              <div class="flex justify-between items-center mb-6">
-                <h2 class="text-2xl font-bold text-gray-800">Top 5 Recommendations</h2>
+                <h2 id="results-heading" class="text-2xl font-bold text-gray-800">Top 5 Recommendations</h2>
                 <button id="try-again-button" class="bg-gray-200 text-gray-700 font-semibold py-2 px-5 rounded-lg hover:bg-gray-300 transition-colors">
                     New Search
                 </button>
@@ -75,6 +75,7 @@
         const resultsContainer = document.getElementById('results-container');
         const resultsGrid = document.getElementById('results-grid');
         const tryAgainButton = document.getElementById('try-again-button');
+        const resultsHeading = document.getElementById('results-heading');
 
         // --- Event Listeners ---
         searchButton.addEventListener('click', handleSearch);
@@ -113,7 +114,7 @@
                 }
 
                 const recommendations = await response.json();
-                displayResults(recommendations);
+                displayResults(recommendations, query);
 
             } catch (error) {
                 console.error('Error fetching recommendations:', error);
@@ -124,13 +125,9 @@
             }
         }
 
-        function displayResults(recommendations) {
+        function displayResults(recommendations, query) {
             resultsContainer.classList.remove('hidden');
-            
-            if (recommendations.length === 0) {
-                resultsGrid.innerHTML = '<p class="text-center text-gray-600">No recommendations found. Try a different query.</p>';
-                return;
-            }
+            resultsHeading.innerHTML = `Top 5 Recommendations for: \n<span class="text-amber-700">'${query}'</span>`;
 
             recommendations.forEach((coffee, index) => {
                 const card = createCoffeeCard(coffee);
@@ -142,37 +139,71 @@
             });
         }
 
+        function formatTestMethod(method) {
+            if (!method) return 'N/A';
+            return method.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+        }
+
         function createCoffeeCard(coffee) {
             console.log("Creating card for coffee:", coffee["coffee name"]);
             const card = document.createElement('div');
             card.className = 'bg-white p-6 rounded-xl shadow-md border border-gray-200 card-enter';
             
+            // tags
             const roastLevel = coffee['roast level'] ? `<span class="bg-amber-100 text-amber-800 text-xs font-medium mr-2 px-2.5 py-0.5 rounded-full">${coffee['roast level']}</span>` : '';
             const origin = coffee.countries_extracted && coffee.countries_extracted.length > 0 
                 ? `<span class="bg-green-100 text-green-800 text-xs font-medium mr-2 px-2.5 py-0.5 rounded-full">${coffee.countries_extracted.join(', ')}</span>` 
                 : '';
-
-
             const process = coffee.process && coffee.process.length > 0
                 ? `<span class="bg-blue-100 text-blue-800 text-xs font-medium mr-2 px-2.5 py-0.5 rounded-full">${coffee.process.join(', ')}</span>` 
                 : '';
+            const varietals = coffee.varietals && coffee.varietals.length > 0 ? `<span class="bg-purple-100 text-purple-800 text-xs font-medium mr-2 px-2.5 py-0.5 rounded-full">${coffee.varietals.join(', ')}</span>` : '';
+            
+            const price = coffee['est price']; // coffee.price_per_oz ? `$${coffee.price_per_oz}/oz (${coffee.price_tier || 'N/A'})` : 'N/A';
+
+            // create sensory scores grid
+            let scoresHTML = '';
+            const scores = {
+                'Aroma': coffee.aroma, 'Acidity': coffee.acidity, 'Body': coffee.body,
+                'Flavor': coffee.flavor, 'Aftertaste': coffee.aftertaste, "With Milk": coffee['with milk']
+            };
+            for (const[name, score] of Object.entries(scores)) {
+                if(score) {
+                    scoresHTML += `<div class="text-center"><p class="font-bold text-lg">${score * 100}</p><p class="text-xs text-gray-500">${name}</p></div>`; 
+                }
+            }
 
             card.innerHTML = `
                 <div class="flex items-start space-x-4">
                     <div class="flex-shrink-0 h-16 w-16 bg-amber-600 rounded-lg flex items-center justify-center">
                         <span class="text-white text-3xl font-bold">${Math.round(coffee.rating * 100)}</span>
                     </div>
-                    <div class="flex-1">
+                    <div class="flex-1 w-full">
                         <p class="text-sm font-semibold text-gray-500">${coffee.company || 'N/A'}</p>
-                        <h3 class="text-xl font-bold text-gray-900">${coffee['coffee name'] || 'N/A'}</h3>
-                        <div class="mt-2">
-                            ${roastLevel}
-                            ${origin}
-                            ${process}
+                        <a href="${coffee.url}" target="_blank" rel="noopener noreferrer" class="text-xl font-bold text-gray-900 hover:text-amber-700 transition-colors">${coffee['coffee name'] || 'N/A'}</a>
+                        <div class="mt-2 flex flex-wrap gap-2">
+                            ${roastLevel}${origin}${process}${varietals}
                         </div>
                     </div>
                 </div>
+                
                 <p class="mt-4 text-gray-600">${coffee['bottom line'] || 'No summary available.'}</p>
+                
+                <div class="mt-4 border-t pt-4">
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                        <div><p class="font-semibold text-gray-700">Location</p><p>${coffee['roaster location'] || 'N/A'}</p></div>
+                        <div><p class="font-semibold text-gray-700">Price</p><p>${price}</p></div>
+                        <div><p class="font-semibold text-gray-700">Test Method</p><p>${formatTestMethod(coffee.test_method)}</p></div>
+                    </div>
+                </div>
+
+                ${scoresHTML ? `
+                <div class="mt-4 border-t pt-4">
+                    <div class="grid grid-cols-3 md:grid-cols-6 gap-2">
+                        ${scoresHTML}
+                    </div>
+                </div>
+                ` : ''}
             `;
             return card;
         }
@@ -189,3 +220,4 @@
     
 </body>
 </html>
+
