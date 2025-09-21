@@ -1,4 +1,5 @@
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, jsonify
+from flask_cors import CORS
 import pandas as pd
 import torch
 import faiss
@@ -18,6 +19,7 @@ from src.models.model import DualEncoder
 from src.models.predict import get_recommendations, load_model_inference
 
 app = Flask(__name__)
+CORS(app)
 
 # We will attach artifacts to the app object instead of using globals
 app.MODEL = None
@@ -63,9 +65,9 @@ def load_artifacts(flask_app):
 load_artifacts(app)
 
 # -- API Routes --
-@app.route("/")
-def home():
-    return render_template("index_brown.html")
+# @app.route("/")
+# def home():
+#     return render_template("index.html")
 
 @app.route("/recommend", methods=["POST"])
 def recommend():
