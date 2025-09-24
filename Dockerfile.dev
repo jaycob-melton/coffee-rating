@@ -1,0 +1,35 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
+
+RUN mkdir -p /app/data/processed
+RUN mkdir -p /app/data/outputs/model-weights/8-11
+RUN mkdir -p /app/data/outputs/faiss
+
+ARG DATA_URL="https://storage.googleapis.com/project_artifacts_67/preprocessed_data.csv"
+ARG MODEL_WEIGHTS_URL="https://storage.googleapis.com/project_artifacts_67/coffee_model_epoch_11_semi_hard_3.pth"
+ARG FAISS_URL="https://storage.googleapis.com/project_artifacts_67/faiss_index.bin"
+
+RUN curl -L ${DATA_URL} -o /app/data/processed/preprocessed_data.csv
+RUN curl -L ${MODEL_WEIGHTS_URL} -o /app/data/outputs/model-weights/8-11/coffee_model_epoch_11_semi_hard_3.pth
+RUN curl -L ${FAISS_URL} -o /app/data/outputs/faiss/faiss_index.bin
+
+COPY requirements.txt .
+
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY src/app/app.py src/app/
+COPY src/app/templates/index_local.html src/app/templates/
+COPY src/models/model.py src/models/
+COPY src/models/evaluate.py src/models/
+COPY src/models/predict.py src/models/
+COPY src/models/utils.py src/models/ 
+
+EXPOSE 5000
+
+ENV FLASK_APP=src.app.app
+ENV FLASK_DEBUG=1
+
+CMD flask run --host=0.0.0.0 --port=$PORT --no-reload

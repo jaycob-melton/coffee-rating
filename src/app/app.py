@@ -65,7 +65,7 @@ load_artifacts(app)
 # -- API Routes --
 @app.route("/")
 def home():
-    return render_template("index_brown.html")
+    return render_template("index_local.html")
 
 @app.route("/recommend", methods=["POST"])
 def recommend():

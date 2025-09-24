@@ -55,7 +55,7 @@ class DualEncoder(nn.Module):
         # Hugging Face model + tokenizer (trainable)
         self.tokenizer = AutoTokenizer.from_pretrained(text_model_name, use_fast=True)
         self.transformer = AutoModel.from_pretrained(text_model_name)
-        self.text_hidden = self.transformer.config.hidden_size  # e.g., 768
+        self.text_hidden = self.transformer.config.hidden_size  
 
         self.metadata_encoder = MetadataEncoder(vocabs, numerical_dim)
         self.fusion_layer = nn.Linear(self.text_hidden + self.metadata_encoder.output_dim, embedding_dim)

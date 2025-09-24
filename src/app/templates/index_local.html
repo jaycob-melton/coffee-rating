@@ -140,7 +140,7 @@
 
         function displayResults(recommendations, query) {
             resultsContainer.classList.remove('hidden');
-            resultsHeading.innerHTML = `Top 5 Recommendations for: <span class="font-bold text-brand-tan">'${query}'</span>`;
+            resultsHeading.innerHTML = `Top 5 Recommendations for:<br><span class="font-bold text-brand-tan/70">'${query}'</span>`;
 
             recommendations.forEach((coffee, index) => {
                 const card = createCoffeeCard(coffee);
@@ -185,7 +185,7 @@
 
             card.innerHTML = `
                 <div class="flex items-start space-x-4">
-                    <div class="flex-shrink-0 h-16 w-16 bg-brand-tan rounded-lg flex items-center justify-center">
+                    <div class="flex-shrink-0 h-16 w-16 bg-tag-roast rounded-lg flex items-center justify-center">
                         <span class="text-brand-brown text-3xl font-bold">${Math.round(coffee.rating * 100)}</span>
                     </div>
                     <div class="flex-1 w-full">
@@ -224,6 +224,11 @@
             queryInput.value = '';
             searchContainer.classList.remove('hidden');
             queryInput.focus();
+        }
+
+        function capitalizeWords(str) {
+            if (!str) return '';
+            return str.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
         }
 
     </script>

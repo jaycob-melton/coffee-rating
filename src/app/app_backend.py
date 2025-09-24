@@ -45,7 +45,7 @@ def load_artifacts(flask_app):
     flask_app.COFFEE_DF["combined_text"] = flask_app.COFFEE_DF["blind assessment"].fillna("") + " " + flask_app.COFFEE_DF["bottom line"].fillna("")
     
     print("Loading Model...")
-    flask_app.MODEL, flask_app.VOCABS = load_model_inference(model_path, numerical_dim=10, device=device)
+    flask_app.MODEL, flask_app.VOCABS = load_model_inference(model_path, numerical_dim=10, device=device, model_location="sbert_model")
     
     print("Loading FAISS Index")
     if os.path.exists(faiss_path):

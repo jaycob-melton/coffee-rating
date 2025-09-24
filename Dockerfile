@@ -6,7 +6,16 @@ COPY requirements.txt .
 
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY . . 
+# COPY . . 
+COPY src/app/app_backend.py src/app/
+# COPY src/app/templates/index.html src/app/templates/
+COPY src/models/model.py src/models/
+COPY src/models/evaluate.py src/models/
+COPY src/models/predict.py src/models/
+COPY src/models/utils.py src/models/ 
+COPY data/outputs/faiss/faiss.bin data/outputs/faiss/
+COPY data/outputs/model-weights/8-11/coffee_model_epoch_11_semi_hard_3.pth data/outputs/model-weights/8-11/
+COPY data/outputs/processed/preprocessed_data.csv data/outputs/processed/
 
 EXPOSE 5000
 

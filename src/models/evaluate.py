@@ -10,7 +10,7 @@ from tqdm import tqdm
 from .utils import CoffeeDataset, to_list
 from .model import DualEncoder
 
-def load_model_inference(model_path: str, numerical_dim: int, device):
+def load_model_inference(model_path: str, numerical_dim: int, device, model_location="sentence-transformers/all-mpnet-base-v2"):
     """
     Loads a trained model from a .pth file for inference, i.e. evaluation
     """
@@ -18,10 +18,7 @@ def load_model_inference(model_path: str, numerical_dim: int, device):
     
     vocabs = checkpoint["vocabs"]
 
-
-    local_model_path = "sbert_model"
-
-    model = DualEncoder(vocabs, numerical_dim, local_model_path)
+    model = DualEncoder(vocabs, numerical_dim, model_location)
     model.load_state_dict(checkpoint["model_state_dict"])
     model.to(device)
     model.eval()

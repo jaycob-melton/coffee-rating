@@ -448,12 +448,12 @@ def dump_lists_n_dicts_json():
     
 
 def main():
-    # parser = argparse.ArgumentParser(description="Preprocess raw coffee review dataset for training")
-    # parser.add_argument("input_file", type=str, help="Input file with existing dataset to append to")
-    # parser.add_argument("output_file", type=str, help="Output file name for the dataset")
-    # args = parser.parse_args()
-    # preprocess_data(args.input_file, args.output_file)
-    dump_lists_n_dicts_json()
+    parser = argparse.ArgumentParser(description="Preprocess raw coffee review dataset for training")
+    parser.add_argument("input_file", type=str, help="Input file with existing dataset to append to")
+    parser.add_argument("output_file", type=str, help="Output file name for the dataset")
+    args = parser.parse_args()
+    preprocess_data(args.input_file, args.output_file)
+    # dump_lists_n_dicts_json()
 
 if __name__ == "__main__":
     main()

@@ -18,10 +18,10 @@ __pycache__/
 notebooks/
 
 # Raw data or training-specific assets
-data/processed/coffee_database.db
-data/outputs/model-weights/8-11/coffee_model_epoch_11.pth
-data/outputs/model-weights/8-11/coffee_model_epoch_11_semi_hard_epoch_3_3.pth
-src/data/
-src/features/
-src/app/templates/
-src/app/app.py
+# data/processed/coffee_database.db
+# data/outputs/model-weights/8-11/coffee_model_epoch_11.pth
+# data/outputs/model-weights/8-11/coffee_model_epoch_11_semi_hard_epoch_3_3.pth
+# src/data/
+# src/features/
+# src/app/templates/
+# src/app/app.py
