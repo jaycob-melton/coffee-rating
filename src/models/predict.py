@@ -6,6 +6,7 @@ from tqdm import tqdm
 from .evaluate import load_model_inference
 from .utils import CoffeeDataset
 import time
+import argparse
 
 def build_search_index(model, coffee_df, vocabs, device, output_path="faiss_index.bin"):
     """Encodes all coffees and builds a searchable FAISS index."""
@@ -44,7 +45,7 @@ def build_search_index(model, coffee_df, vocabs, device, output_path="faiss_inde
     index.add(all_coffee_embeddings)
     print(f"FAISS index built with {index.ntotal} vectors.")
     faiss.write_index(index, output_path)
-    return index
+    return all_coffee_embeddings, index
 
 
 def get_recommendations(query, model, index, coffee_df, top_k=5):
@@ -63,8 +64,32 @@ def get_recommendations(query, model, index, coffee_df, top_k=5):
       
       
 if __name__ == "__main__":
-    PREPROCESSED_PATH = rf"data\processed\preprocessed_data.csv"
-    MODEL_PATH = rf"data\outputs\model-weights\coffee_model_epoch_11_semi_hard_epoch_3_3.pth"
+    parser = argparse.ArgumentParser(description="Run various prediction functions")
+    parser.add_argument("--goal", type=str, choices=["predict", "create_index_or_embeddings"], help="'predict' means you want to get predictions for a query." \
+        "This requires the additional argument 'query' and optional argument 'query_recs' for saving the query recommendations to a csv." \
+        "' create_index_or_embedding' is self-explanatory. Provide" \
+        " additional arguments 'faiss_output_file', 'embedding_output_file', or both")
+    parser.add_argument("--data_input_file", type=str, help="Input path for the main coffee data. Type: .csv")
+    parser.add_argument("--model_pth_file", type=str, help="Input path for the model weights. Type: .pth")
+    parser.add_argument("--faiss_output_file", type=str, default=None, help="Output path for the faiss index. Type: .bin")
+    parser.add_argument("--embedding_output_file", type=str, default=None, help="Output path for the raw numpy embeddings. Type: .npy")
+    parser.add_argument("--query", type=str, default=None, help="Query to have recommendations provided for. Type: .txt")
+    parser.add_argument("--query_recs", type=str, default=None, help="Save path for recommendations for the given user query")
+    
+    args = parser.parse_args()
+    
+    PREPROCESSED_PATH = args.data_input_file
+    MODEL_PATH = args.model_pth_file
+    INDEX_PATH = args.faiss_output_file
+    EMBEDDINGS_PATH = args.embedding_output_file
+    QUERY_PATH = args.query
+    QUERY_REC_PATH = args.query_recs
+    
+    assert(PREPROCESSED_PATH and MODEL_PATH)
+    if args.goal == "predict":
+        assert(INDEX_PATH and QUERY_PATH)
+    else:
+        assert(INDEX_PATH or EMBEDDINGS_PATH)
     
     DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -72,18 +97,35 @@ if __name__ == "__main__":
     df = pd.read_csv(PREPROCESSED_PATH)
     df["combined_text"] = df["blind assessment"].fillna("") + " " + df["bottom line"].fillna("")
     
-    model, vocabs = load_model_inference(MODEL_PATH, numerical_dim=10, device=DEVICE)
+    model, vocabs = load_model_inference(MODEL_PATH, numerical_dim=10, device=DEVICE, model_location="/home/jaycob-laptop/Projects/coffee-rating/sbert_model")
     
-    # search_index = build_search_index(model, df, vocabs, DEVICE)
-    search_index = faiss.read_index("faiss_index.bin")
+    if args.goal == "predict":
+        query = open(QUERY_PATH, "r")
+        # load in the given faiss index
+        index = faiss.read_index(INDEX_PATH)
+        
+        # acquire the top 10 recommendations and time it
+        start_time = time.time()
+        recommendations = get_recommendations(query, model, index, df, top_k=10)
+        end_time = time.time()
+        
+        duration = end_time - start_time
+        print(f"Recommendations took {duration:.2f} seconds to run serve.")
+        
+        # dump recommendations to csv if requested
+        display_cols = ['url', 'company', 'coffee name', 'roast level', 'process', 'test_method', 'countries_extracted', "flavor_profile", "blind assessment", 'bottom line']
+        print(recommendations[display_cols])
+        if QUERY_REC_PATH:
+            recommendations[display_cols].to_csv(QUERY_REC_PATH)
+
+    else:
+        # build embeddings/search_index
+        all_embeddings, search_index = build_search_index(model, df, vocabs, DEVICE)
+        # save requested files
+        if INDEX_PATH:
+            faiss.write_index(search_index, INDEX_PATH)
+            print(f"Saved FAISS index to: {INDEX_PATH}")
+        if EMBEDDINGS_PATH:
+            np.save(EMBEDDINGS_PATH, all_embeddings) 
+            print(f"Saved raw embeddings to: {EMBEDDINGS_PATH}")
     
-    example_query = "Medium roast coffee from Ethipia with hints of berry."
-    
-    start_time = time.time()
-    recommendations = get_recommendations(example_query, model, search_index, df, top_k=10)
-    end_time = time.time()
-    duration = end_time - start_time
-    print(f"Recommendations took {duration:.2f} seconds to run serve.")
-    display_cols = ['url', 'company', 'coffee name', 'roast level', 'process', 'test_method', 'countries_extracted', "flavor_profile", "blind assessment", 'bottom line']
-    print(recommendations[display_cols])
-    recommendations[display_cols].to_csv("test_recommendations.csv")
