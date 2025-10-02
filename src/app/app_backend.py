@@ -87,7 +87,7 @@ def recommend():
         
         recommendations = get_recommendations(query, app.MODEL, app.FAISS_INDEX, app.COFFEE_DF, top_k=5)
         
-        # Use pandas' robust to_json method first to handle NaNs and dtypes
+        # Use pandas' to_json method to handle NaNs and dtypes
         valid_json_string = recommendations.to_json(orient="records")
         results_list = json.loads(valid_json_string)
 
@@ -112,7 +112,7 @@ def recommend():
         print("-----------------------")
         return jsonify({"error": "An internal server error occurred."}), 500
 
-# -- Main Execution --
+
 if __name__ == "__main__":
     # Load artifacts into the app context before running
     # load_artifacts(app)

@@ -11,3 +11,4 @@ OpenAI-Token.txt
 __pycache__
 sbert_model/
 *.bin
+*.png

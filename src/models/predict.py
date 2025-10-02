@@ -97,7 +97,7 @@ if __name__ == "__main__":
     df = pd.read_csv(PREPROCESSED_PATH)
     df["combined_text"] = df["blind assessment"].fillna("") + " " + df["bottom line"].fillna("")
     
-    model, vocabs = load_model_inference(MODEL_PATH, numerical_dim=10, device=DEVICE, model_location="/home/jaycob-laptop/Projects/coffee-rating/sbert_model")
+    model, vocabs = load_model_inference(MODEL_PATH, numerical_dim=10, device=DEVICE, model_location="/coffee-rating/sbert_model")
     
     if args.goal == "predict":
         query = open(QUERY_PATH, "r")
