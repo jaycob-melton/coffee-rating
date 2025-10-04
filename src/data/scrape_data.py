@@ -14,7 +14,7 @@ def get_review_links(base: str, params: str, pages: Optional[int] = None) -> lis
     page = 1
     review_links = []
     print("Scraping review links...")
-    while pages is not None and page <= pages:
+    while pages is None or page <= pages:
         if page == 1:
             url = base + params
         else:
@@ -141,8 +141,8 @@ def dump_to_csv(data: dict, output_file: str, input_file: Optional[str] = None) 
         df["review date"] = pd.to_datetime(df["review date"], errors='coerce')
         df = df.sort_values(by="review date", ascending=False)
         # our true unique id is a particular coffee, and we only keep the newest review 
-        df["id"] = df["company"] + "_" + df["coffee name"]
-        df = df.drop_duplicates(subset=["id"], keep="first")
+        df["id"] = pd.RangeIndex(df.shape[0])
+        # df = df.drop_duplicates(subset=["id"], keep="first")
         try:
             df.to_csv(output_file, index=False)
             print(f"Saved {len(df)} reviews to {output_file}")
@@ -169,8 +169,8 @@ def main():
 
     base = "https://www.coffeereview.com/advanced-search/"
     params = (
-        "?keyword=&search=Search+Now&locations=all&score_all"
-        "=on&score_96_100=on&score_93_95=on&score_90_92=on&score_85_89=on&score_85=on"
+        "?keyword=&search=Search+Now&locations=all&score_all/"
+        "=on&score_96_100=on&score_93_95=on&score_90_92=on&score_85_89=on&score_85=on&results=all"
     )
 
     review_links = get_review_links(base, params, pages=args.num_pages if args.scrape_type == "pages" else None)

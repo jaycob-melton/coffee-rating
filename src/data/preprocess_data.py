@@ -108,7 +108,7 @@ def extract_process(notes: str) -> str:
         notes (str): The notes from the coffee review.
 
     Returns:
-        str: The processing method found in the notes, or "Unkown" if no method is found.
+        str: The processing method found in the notes, or "Unknown" if no method is found.
     """
     if not isinstance(notes, str):
         return ["unknown"]
@@ -256,7 +256,7 @@ def extract_varietals(text: str) -> list:
     Extracts a list of coffee varietals from a text string.
     """
     if not isinstance(text, str):
-        return ["unkown"]
+        return ["unknown"]
     
     found_varietals = set()
     lower_text = text.lower()
@@ -274,7 +274,7 @@ def extract_varietals(text: str) -> list:
             else:
                 found_varietals.add(varietal)
     if len(found_varietals) == 0:
-        return ["unkown"]
+        return ["unknown"]
                 
     return sorted(list(found_varietals))
 
@@ -325,8 +325,8 @@ def standardize_pricing(price_string: str) -> Optional[float]:
     if weight_oz == 0:
         return None
     
-    # 6/9/25
-    ntd_to_usd_rate = 29.9340
+    # 10/2/25
+    ntd_to_usd_rate = 30.45
     price_usd = price
     
     if currency == "NT":
@@ -392,7 +392,7 @@ def preprocess_data(input_path: str, output_path: str) -> pd.DataFrame:
                     )
                 )
             )
-        )
+        )\
     )
 
     # extract process
@@ -417,6 +417,7 @@ def preprocess_data(input_path: str, output_path: str) -> pd.DataFrame:
 
     # normalize numerical columns
     for col in NUMERICAL_COLS_TO_NORMALIZE:
+        df[col] = df[col].str.replace("") 
         df[col] = pd.to_numeric(df[col], errors='coerce')
     df[NUMERICAL_COLS_TO_NORMALIZE] = df[NUMERICAL_COLS_TO_NORMALIZE].fillna(0)
 
