@@ -3,8 +3,8 @@ import numpy as np
 import torch
 import faiss
 from tqdm import tqdm
-from .evaluate import load_model_inference
-from .utils import CoffeeDataset
+from models.evaluate import load_model_inference
+from models.utils import CoffeeDataset
 import time
 import argparse
 
@@ -100,7 +100,8 @@ if __name__ == "__main__":
     model, vocabs = load_model_inference(MODEL_PATH, numerical_dim=10, device=DEVICE, model_location="/coffee-rating/sbert_model")
     
     if args.goal == "predict":
-        query = open(QUERY_PATH, "r")
+        with open(QUERY_PATH, "r") as f:
+            query = f.read().strip()
         # load in the given faiss index
         index = faiss.read_index(INDEX_PATH)
         

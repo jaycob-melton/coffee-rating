@@ -12,3 +12,4 @@ __pycache__
 sbert_model/
 *.bin
 *.png
+src/models/query.txt
