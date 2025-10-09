@@ -64,7 +64,7 @@ def calculate_relevance_old(query: str, coffee_row: pd.Series) -> int:
     
     matched_keywords = query_keywords.intersection(all_coffee_keywords)
     
-    # This score is now relative to the complexity of the query
+    
     if not query_keywords:
         return 0
         
@@ -105,7 +105,7 @@ def calculate_relevance(query: str, coffee_row: pd.Series) -> int:
 
     query = query.lower()
 
-    # --- 1. Parse the Query to find what the user is asking for ---
+    
     query_attributes = {}
     total_possible_score = 0
     
@@ -118,7 +118,7 @@ def calculate_relevance(query: str, coffee_row: pd.Series) -> int:
     if total_possible_score == 0:
         return 0 # The query is too generic to be scored
 
-    # --- 2. Score the coffee based on how well it matches the query attributes ---
+    
     achieved_score = 0
     
     # Safely get the coffee's attributes
@@ -148,7 +148,7 @@ def calculate_relevance(query: str, coffee_row: pd.Series) -> int:
         matches = query_values.intersection(coffee_attributes.get(attr_type, set()))
         achieved_score += ATTRIBUTE_WEIGHTS[attr_type] * len(matches)
         
-    # --- 3. Calculate the final relevance score (0-4) ---
+    
     match_percentage = achieved_score / total_possible_score
     
     if match_percentage >= 0.99: return 4 # Perfect
