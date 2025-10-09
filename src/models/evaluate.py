@@ -7,8 +7,8 @@ import ast
 import re
 import os
 from tqdm import tqdm
-from .utils import CoffeeDataset, to_list
-from .model import DualEncoder
+from src.models.utils import CoffeeDataset, to_list
+from src.models.model import DualEncoder
 
 def load_model_inference(model_path: str, numerical_dim: int, device, model_location="sentence-transformers/all-mpnet-base-v2"):
     """
@@ -36,7 +36,6 @@ def calculate_relevance_old(query: str, coffee_row: pd.Series) -> int:
     """
     query = query.lower()
     
-    # --- Step 1: Extract all potential keywords from the coffee ---
     all_coffee_keywords = set()
     try:
         # Safely handle list-like columns
@@ -60,14 +59,11 @@ def calculate_relevance_old(query: str, coffee_row: pd.Series) -> int:
     except:
         pass # Handle potential parsing errors gracefully
 
-    # --- Step 2: Extract keywords from the query ---
     # This is a simple heuristic; a more advanced method could use NLP
     query_keywords = set(re.findall(r'\b\w+\b', query))
     
-    # --- Step 3: Determine number of matching keywords ---
     matched_keywords = query_keywords.intersection(all_coffee_keywords)
     
-    # --- Step 4: Assign a relevance score ---
     # This score is now relative to the complexity of the query
     if not query_keywords:
         return 0

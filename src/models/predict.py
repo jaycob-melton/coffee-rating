@@ -3,8 +3,8 @@ import numpy as np
 import torch
 import faiss
 from tqdm import tqdm
-from models.evaluate import load_model_inference
-from models.utils import CoffeeDataset
+from src.models.evaluate import load_model_inference
+from src.models.utils import CoffeeDataset
 import time
 import argparse
 
