@@ -9,6 +9,7 @@ import os
 from tqdm import tqdm
 from src.models.utils import CoffeeDataset, to_list
 from src.models.model import DualEncoder
+from src.config import PREPROCESSED_DATA_PATH, SBERT_MODEL_DIR, TRAINED_MODEL_PATH#, TRAINING_QUERY_PATH
 
 def load_model_inference(model_path: str, numerical_dim: int, device, model_location="sentence-transformers/all-mpnet-base-v2"):
     """
@@ -26,55 +27,6 @@ def load_model_inference(model_path: str, numerical_dim: int, device, model_loca
     print(f"Model loaded from {model_path} and set to evaluation mode.")
     return model, vocabs
 
-
-def calculate_relevance_old(query: str, coffee_row: pd.Series) -> int:
-    """
-    Assigns a relevance score to a query based on a query
-    - 2: Highly relevant (multiple key terms match)
-    - 1: Partially relevant (at least one key term matches)
-    - 0: Not relevant (no key terms match)
-    """
-    query = query.lower()
-    
-    all_coffee_keywords = set()
-    try:
-        # Safely handle list-like columns
-        origins = [o.lower() for o in ast.literal_eval(coffee_row.get('countries_extracted', '[]'))]
-        processes = [p.lower() for p in ast.literal_eval(coffee_row.get('process', '[]'))]
-        varietals = [v.lower() for v in ast.literal_eval(coffee_row.get('varietals', '[]'))]
-        flavor_profile = ast.literal_eval(coffee_row.get('flavor_profile', '{}'))
-        flavors = [f.lower() for f in flavor_profile.keys()]
-        
-        all_coffee_keywords.update(origins)
-        all_coffee_keywords.update(processes)
-        all_coffee_keywords.update(varietals)
-        all_coffee_keywords.update(flavors)
-        
-        roast = str(coffee_row.get('roast level', '')).lower()
-        if roast: all_coffee_keywords.add(roast)
-        
-        price = str(coffee_row.get('price_tier', '')).lower()
-        if price: all_coffee_keywords.add(price)
-
-    except:
-        pass # Handle potential parsing errors gracefully
-
-    # This is a simple heuristic; a more advanced method could use NLP
-    query_keywords = set(re.findall(r'\b\w+\b', query))
-    
-    matched_keywords = query_keywords.intersection(all_coffee_keywords)
-    
-    
-    if not query_keywords:
-        return 0
-        
-    match_percentage = len(matched_keywords) / len(query_keywords)
-    
-    if match_percentage >= 0.99: return 4 # Perfect match
-    if match_percentage >= 0.75: return 3 # High relevance
-    if match_percentage >= 0.50: return 2 # Medium relevance
-    if match_percentage > 0: return 1   # Low relevance
-    return 0
 
 ATTRIBUTE_WEIGHTS = {
     'origin': 1,
