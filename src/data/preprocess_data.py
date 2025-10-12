@@ -5,6 +5,7 @@ import re
 import argparse
 from typing import Optional
 import json
+from src.config import RAW_DATA_PATH
 
 known_origins = [
     'north america', 
@@ -296,12 +297,12 @@ def standardize_pricing(price_string: str) -> Optional[float]:
         return None
     
     pattern = re.compile(r"""
-        (?P<currency>NT\s\$|\$)? # optional currency (NT or USD)
-        \s* # optional whitespace
-        (?P<price>[\d,]+(?:\.\d+)?) # the price
-        / # seperator
-        (?P<weight>\d+) # weight
-        \s* # optional whitespace
+        (?P<currency>NT\s?\$|\$|RMB|HK|£|RM)?
+        \s*
+        (?P<price>[\d,]+(?:\.\d+)?)
+        \s* / \s*
+        (?P<weight>[\d\.]+)
+        \s*
         (?P<unit>ounces|grams)                     
     """, re.VERBOSE | re.IGNORECASE)
     
@@ -315,8 +316,34 @@ def standardize_pricing(price_string: str) -> Optional[float]:
     price = float(parts["price"].replace(",", ""))
     weight = float(parts["weight"])
     unit = parts["unit"].lower()
-    currency = "USD" if parts["currency"] == "$" else "NT"
+    currency_symbol = parts.get("currency")
+
+    # Exchange rates to USD as of 2025-10-08
+    rates_to_usd = {
+        "NTD": 1 / 30.45,
+        "RMB": 0.14,
+        "HKD": 0.1285,
+        "GBP": 1.33,
+        "MYR": 0.237,
+        "USD": 1.0
+    }
     
+    currency = "USD"
+    if currency_symbol:
+        cs = currency_symbol.strip().upper()
+        if "NT" in cs:
+            currency = "NTD"
+        elif "RMB" in cs:
+            currency = "RMB"
+        elif "HK" in cs:
+            currency = "HKD"
+        elif "£" in cs:
+            currency = "GBP"
+        elif "RM" in cs:
+            currency = "MYR"
+    
+    price_usd = price * rates_to_usd.get(currency, 1.0)
+
     if unit == 'grams':
         weight_oz = weight / 28.34952
     else:
@@ -324,13 +351,6 @@ def standardize_pricing(price_string: str) -> Optional[float]:
         
     if weight_oz == 0:
         return None
-    
-    # 10/2/25
-    ntd_to_usd_rate = 30.45
-    price_usd = price
-    
-    if currency == "NT":
-        price_usd /= ntd_to_usd_rate
     
     price_per_oz = price_usd / weight_oz
     
@@ -341,12 +361,15 @@ def calculate_yearly_tiers(price_series: pd.Series) -> pd.Series:
     """
     Calculates price tiers within a single year, into 4 quartiles
     """
-    return pd.qcut(
-        price_series,
-        q=4,
-        labels=["value", "standard", "premium", "luxury"],
-        duplicates="drop"
-    )
+    try:
+        return pd.qcut(
+            price_series,
+            q=4,
+            labels=["value", "standard", "premium", "luxury"],
+            duplicates="drop"
+        )
+    except ValueError:
+        return pd.Series("standard", index=price_series.index, dtype='object')
 
 
 NUMERICAL_COLS_TO_NORMALIZE = [
@@ -417,7 +440,6 @@ def preprocess_data(input_path: str, output_path: str) -> pd.DataFrame:
 
     # normalize numerical columns
     for col in NUMERICAL_COLS_TO_NORMALIZE:
-        df[col] = df[col].str.replace("") 
         df[col] = pd.to_numeric(df[col], errors='coerce')
     df[NUMERICAL_COLS_TO_NORMALIZE] = df[NUMERICAL_COLS_TO_NORMALIZE].fillna(0)
 
@@ -426,6 +448,7 @@ def preprocess_data(input_path: str, output_path: str) -> pd.DataFrame:
     df_normalized = df.copy()
     df_normalized[NUMERICAL_COLS_TO_NORMALIZE] = scaler.fit_transform(df_normalized[NUMERICAL_COLS_TO_NORMALIZE])
     
+    df_normalized["combined_text"] = df_normalized["blind assessment"].fillna("") + " " + df_normalized["bottom line"].fillna("")
 
     print(f"Writing preprocessed data to {output_path}")
     df_normalized.to_csv(output_path)
@@ -450,10 +473,9 @@ def dump_lists_n_dicts_json():
 
 def main():
     parser = argparse.ArgumentParser(description="Preprocess raw coffee review dataset for training")
-    parser.add_argument("input_file", type=str, help="Input file with existing dataset to append to")
     parser.add_argument("output_file", type=str, help="Output file name for the dataset")
     args = parser.parse_args()
-    preprocess_data(args.input_file, args.output_file)
+    preprocess_data(RAW_DATA_PATH, args.output_file)
     # dump_lists_n_dicts_json()
 
 if __name__ == "__main__":

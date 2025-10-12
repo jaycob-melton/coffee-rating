@@ -7,8 +7,8 @@ from torch.optim import AdamW
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from sklearn.model_selection import train_test_split
-from utils import CoffeeDataset, TripleTrainingDataset, build_all_vocabs
-from model import DualEncoder
+from src.models.utils import CoffeeDataset, TripleTrainingDataset, build_all_vocabs
+from src.models.model import DualEncoder
 
 torch.manual_seed(189)  # for reproducibility
 

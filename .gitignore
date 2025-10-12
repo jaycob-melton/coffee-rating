@@ -1,5 +1,7 @@
 data/
 !src/data/
+models/
+!src/models
 *.csv
 *.pth
 *.jsonl
@@ -8,6 +10,7 @@ data/
 *.yml
 GithubToken.txt
 OpenAI-Token.txt
+query.txt
 __pycache__
 sbert_model/
 *.bin

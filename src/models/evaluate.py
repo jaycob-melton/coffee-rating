@@ -7,8 +7,9 @@ import ast
 import re
 import os
 from tqdm import tqdm
-from .utils import CoffeeDataset, to_list
-from .model import DualEncoder
+from src.models.utils import CoffeeDataset, to_list
+from src.models.model import DualEncoder
+from src.config import QUERIES_PATH, SBERT_MODEL_DIR, PREPROCESSED_DATA_PATH, TRAINED_MODEL_PATH, EMBEDDINGS_PATH, FAISS_INDEX_PATH
 
 def load_model_inference(model_path: str, numerical_dim: int, device, model_location="sentence-transformers/all-mpnet-base-v2"):
     """
@@ -26,59 +27,6 @@ def load_model_inference(model_path: str, numerical_dim: int, device, model_loca
     print(f"Model loaded from {model_path} and set to evaluation mode.")
     return model, vocabs
 
-
-def calculate_relevance_old(query: str, coffee_row: pd.Series) -> int:
-    """
-    Assigns a relevance score to a query based on a query
-    - 2: Highly relevant (multiple key terms match)
-    - 1: Partially relevant (at least one key term matches)
-    - 0: Not relevant (no key terms match)
-    """
-    query = query.lower()
-    
-    # --- Step 1: Extract all potential keywords from the coffee ---
-    all_coffee_keywords = set()
-    try:
-        # Safely handle list-like columns
-        origins = [o.lower() for o in ast.literal_eval(coffee_row.get('countries_extracted', '[]'))]
-        processes = [p.lower() for p in ast.literal_eval(coffee_row.get('process', '[]'))]
-        varietals = [v.lower() for v in ast.literal_eval(coffee_row.get('varietals', '[]'))]
-        flavor_profile = ast.literal_eval(coffee_row.get('flavor_profile', '{}'))
-        flavors = [f.lower() for f in flavor_profile.keys()]
-        
-        all_coffee_keywords.update(origins)
-        all_coffee_keywords.update(processes)
-        all_coffee_keywords.update(varietals)
-        all_coffee_keywords.update(flavors)
-        
-        roast = str(coffee_row.get('roast level', '')).lower()
-        if roast: all_coffee_keywords.add(roast)
-        
-        price = str(coffee_row.get('price_tier', '')).lower()
-        if price: all_coffee_keywords.add(price)
-
-    except:
-        pass # Handle potential parsing errors gracefully
-
-    # --- Step 2: Extract keywords from the query ---
-    # This is a simple heuristic; a more advanced method could use NLP
-    query_keywords = set(re.findall(r'\b\w+\b', query))
-    
-    # --- Step 3: Determine number of matching keywords ---
-    matched_keywords = query_keywords.intersection(all_coffee_keywords)
-    
-    # --- Step 4: Assign a relevance score ---
-    # This score is now relative to the complexity of the query
-    if not query_keywords:
-        return 0
-        
-    match_percentage = len(matched_keywords) / len(query_keywords)
-    
-    if match_percentage >= 0.99: return 4 # Perfect match
-    if match_percentage >= 0.75: return 3 # High relevance
-    if match_percentage >= 0.50: return 2 # Medium relevance
-    if match_percentage > 0: return 1   # Low relevance
-    return 0
 
 ATTRIBUTE_WEIGHTS = {
     'origin': 1,
@@ -109,7 +57,7 @@ def calculate_relevance(query: str, coffee_row: pd.Series) -> int:
 
     query = query.lower()
 
-    # --- 1. Parse the Query to find what the user is asking for ---
+    
     query_attributes = {}
     total_possible_score = 0
     
@@ -122,7 +70,7 @@ def calculate_relevance(query: str, coffee_row: pd.Series) -> int:
     if total_possible_score == 0:
         return 0 # The query is too generic to be scored
 
-    # --- 2. Score the coffee based on how well it matches the query attributes ---
+    
     achieved_score = 0
     
     # Safely get the coffee's attributes
@@ -152,7 +100,7 @@ def calculate_relevance(query: str, coffee_row: pd.Series) -> int:
         matches = query_values.intersection(coffee_attributes.get(attr_type, set()))
         achieved_score += ATTRIBUTE_WEIGHTS[attr_type] * len(matches)
         
-    # --- 3. Calculate the final relevance score (0-4) ---
+    
     match_percentage = achieved_score / total_possible_score
     
     if match_percentage >= 0.99: return 4 # Perfect
@@ -186,32 +134,35 @@ def evaluate(model, test_df, vocabs, training_data_path, device, precomputed_ind
 
     test_dataset = CoffeeDataset(test_df, vocabs)
 
-    print("Pre-computing coffee embeddings for the test set...")
-    coffee_embeddings = []
-    with torch.no_grad():
-        for i in tqdm(range(len(test_dataset)), desc="Encoding Coffees"):
-            text, numericals, categoricals = test_dataset[i]
+    if EMBEDDINGS_PATH:
+        coffee_embeddings = np.load(EMBEDDINGS_PATH)
+    else:
+        print("Pre-computing coffee embeddings for the test set...")
+        coffee_embeddings = []
+        with torch.no_grad():
+            for i in tqdm(range(len(test_dataset)), desc="Encoding Coffees"):
+                text, numericals, categoricals = test_dataset[i]
 
-            # batch of size 1
-            coffee_batch = {
-                "text": [text],
-                "numericals": numericals.unsqueeze(0).to(device),
-                "categoricals": {
-                    'roast level': categoricals['roast level'].unsqueeze(0).to(device),
-                    'test_method': categoricals['test_method'].unsqueeze(0).to(device),
-                    'price_tier': categoricals['price_tier'].unsqueeze(0).to(device),
-                    'countries_extracted': categoricals['countries_extracted'].to(device),
-                    'countries_extracted_offsets': torch.tensor([0], dtype=torch.long).to(device),
-                    'process': categoricals['process'].to(device),
-                    'process_offsets': torch.tensor([0], dtype=torch.long).to(device),
-                    'varietals': categoricals['varietals'].to(device),
-                    'varietals_offsets': torch.tensor([0], dtype=torch.long).to(device),
+                # batch of size 1
+                coffee_batch = {
+                    "text": [text],
+                    "numericals": numericals.unsqueeze(0).to(device),
+                    "categoricals": {
+                        'roast level': categoricals['roast level'].unsqueeze(0).to(device),
+                        'test_method': categoricals['test_method'].unsqueeze(0).to(device),
+                        'price_tier': categoricals['price_tier'].unsqueeze(0).to(device),
+                        'countries_extracted': categoricals['countries_extracted'].to(device),
+                        'countries_extracted_offsets': torch.tensor([0], dtype=torch.long).to(device),
+                        'process': categoricals['process'].to(device),
+                        'process_offsets': torch.tensor([0], dtype=torch.long).to(device),
+                        'varietals': categoricals['varietals'].to(device),
+                        'varietals_offsets': torch.tensor([0], dtype=torch.long).to(device),
+                    }
                 }
-            }
-            embedding = model.encode_coffees(coffee_batch)
-            coffee_embeddings.append(embedding.cpu().numpy())
+                embedding = model.encode_coffees(coffee_batch)
+                coffee_embeddings.append(embedding.cpu().numpy())
 
-    coffee_embeddings = np.vstack(coffee_embeddings)
+        coffee_embeddings = np.vstack(coffee_embeddings)
 
     # using FAISS index for speedy searching
     if precomputed_index is None:
@@ -222,7 +173,7 @@ def evaluate(model, test_df, vocabs, training_data_path, device, precomputed_ind
         print(f"FAISS index built with {index.ntotal} vectors.")
     else:
         print("Using precomputed FAISS index...")
-        index = precomputed_index
+        index = faiss.read_index(str(FAISS_INDEX_PATH))
 
     # generate the test queries and evaluate
     print("Generating test queries and evaluating recall...")
@@ -288,16 +239,10 @@ def evaluate(model, test_df, vocabs, training_data_path, device, precomputed_ind
 
 
 if __name__ == "__main__":
-    PREPROCESSED_PATH = "data/processed/test_data_8_11.csv"
-    # TRAINING_DATA_PATH = "data/processed/llm-queries/synthetic_queries_np_4_1_nano.jsonl"
-    TRAINING_DATA_PATH = "data/processed/training_data.jsonl"
-    MODEL_PATH = rf"data\outputs\model-weights\coffee_model_epoch_11_semi_hard_epoch_3_3.pth"
-
     DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
+    print("Device:", DEVICE)
     print("Loading Coffee Data...")
-    test_df = pd.read_csv(PREPROCESSED_PATH)
-    # df["combined_text"] = df["blind assessment"].fillna("") + " " + df["bottom line"].fillna("")
+    df = pd.read_csv(PREPROCESSED_DATA_PATH)
     
-    model, vocabs = load_model_inference(MODEL_PATH, numerical_dim=10, device=DEVICE)
-    evaluate(model, test_df, vocabs, TRAINING_DATA_PATH, DEVICE)
+    model, vocabs = load_model_inference(TRAINED_MODEL_PATH, numerical_dim=10, device=DEVICE, model_location=SBERT_MODEL_DIR)
+    evaluate(model, df, vocabs, QUERIES_PATH, DEVICE, FAISS_INDEX_PATH)
