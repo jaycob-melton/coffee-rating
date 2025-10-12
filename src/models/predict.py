@@ -92,7 +92,7 @@ if __name__ == "__main__":
 
     print("Loading Coffee Data...")
     df = pd.read_csv(PREPROCESSED_DATA_PATH)
-    df["combined_text"] = df["blind assessment"].fillna("") + " " + df["bottom line"].fillna("")
+    # df["combined_text"] = df["blind assessment"].fillna("") + " " + df["bottom line"].fillna("")
     
     model, vocabs = load_model_inference(TRAINED_MODEL_PATH, numerical_dim=10, device=DEVICE, model_location=SBERT_MODEL_DIR)
     

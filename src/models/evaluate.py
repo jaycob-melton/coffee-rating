@@ -9,7 +9,7 @@ import os
 from tqdm import tqdm
 from src.models.utils import CoffeeDataset, to_list
 from src.models.model import DualEncoder
-from src.config import PREPROCESSED_DATA_PATH, SBERT_MODEL_DIR, TRAINED_MODEL_PATH#, TRAINING_QUERY_PATH
+from src.config import QUERIES_PATH, SBERT_MODEL_DIR, PREPROCESSED_DATA_PATH, TRAINED_MODEL_PATH, EMBEDDINGS_PATH, FAISS_INDEX_PATH
 
 def load_model_inference(model_path: str, numerical_dim: int, device, model_location="sentence-transformers/all-mpnet-base-v2"):
     """
@@ -134,32 +134,35 @@ def evaluate(model, test_df, vocabs, training_data_path, device, precomputed_ind
 
     test_dataset = CoffeeDataset(test_df, vocabs)
 
-    print("Pre-computing coffee embeddings for the test set...")
-    coffee_embeddings = []
-    with torch.no_grad():
-        for i in tqdm(range(len(test_dataset)), desc="Encoding Coffees"):
-            text, numericals, categoricals = test_dataset[i]
+    if EMBEDDINGS_PATH:
+        coffee_embeddings = np.load(EMBEDDINGS_PATH)
+    else:
+        print("Pre-computing coffee embeddings for the test set...")
+        coffee_embeddings = []
+        with torch.no_grad():
+            for i in tqdm(range(len(test_dataset)), desc="Encoding Coffees"):
+                text, numericals, categoricals = test_dataset[i]
 
-            # batch of size 1
-            coffee_batch = {
-                "text": [text],
-                "numericals": numericals.unsqueeze(0).to(device),
-                "categoricals": {
-                    'roast level': categoricals['roast level'].unsqueeze(0).to(device),
-                    'test_method': categoricals['test_method'].unsqueeze(0).to(device),
-                    'price_tier': categoricals['price_tier'].unsqueeze(0).to(device),
-                    'countries_extracted': categoricals['countries_extracted'].to(device),
-                    'countries_extracted_offsets': torch.tensor([0], dtype=torch.long).to(device),
-                    'process': categoricals['process'].to(device),
-                    'process_offsets': torch.tensor([0], dtype=torch.long).to(device),
-                    'varietals': categoricals['varietals'].to(device),
-                    'varietals_offsets': torch.tensor([0], dtype=torch.long).to(device),
+                # batch of size 1
+                coffee_batch = {
+                    "text": [text],
+                    "numericals": numericals.unsqueeze(0).to(device),
+                    "categoricals": {
+                        'roast level': categoricals['roast level'].unsqueeze(0).to(device),
+                        'test_method': categoricals['test_method'].unsqueeze(0).to(device),
+                        'price_tier': categoricals['price_tier'].unsqueeze(0).to(device),
+                        'countries_extracted': categoricals['countries_extracted'].to(device),
+                        'countries_extracted_offsets': torch.tensor([0], dtype=torch.long).to(device),
+                        'process': categoricals['process'].to(device),
+                        'process_offsets': torch.tensor([0], dtype=torch.long).to(device),
+                        'varietals': categoricals['varietals'].to(device),
+                        'varietals_offsets': torch.tensor([0], dtype=torch.long).to(device),
+                    }
                 }
-            }
-            embedding = model.encode_coffees(coffee_batch)
-            coffee_embeddings.append(embedding.cpu().numpy())
+                embedding = model.encode_coffees(coffee_batch)
+                coffee_embeddings.append(embedding.cpu().numpy())
 
-    coffee_embeddings = np.vstack(coffee_embeddings)
+        coffee_embeddings = np.vstack(coffee_embeddings)
 
     # using FAISS index for speedy searching
     if precomputed_index is None:
@@ -170,7 +173,7 @@ def evaluate(model, test_df, vocabs, training_data_path, device, precomputed_ind
         print(f"FAISS index built with {index.ntotal} vectors.")
     else:
         print("Using precomputed FAISS index...")
-        index = precomputed_index
+        index = faiss.read_index(str(FAISS_INDEX_PATH))
 
     # generate the test queries and evaluate
     print("Generating test queries and evaluating recall...")
@@ -236,16 +239,10 @@ def evaluate(model, test_df, vocabs, training_data_path, device, precomputed_ind
 
 
 if __name__ == "__main__":
-    PREPROCESSED_PATH = "data/processed/test_data_8_11.csv"
-    # TRAINING_DATA_PATH = "data/processed/llm-queries/synthetic_queries_np_4_1_nano.jsonl"
-    TRAINING_DATA_PATH = "data/processed/training_data.jsonl"
-    MODEL_PATH = rf"data\outputs\model-weights\coffee_model_epoch_11_semi_hard_epoch_3_3.pth"
-
     DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
+    print("Device:", DEVICE)
     print("Loading Coffee Data...")
-    test_df = pd.read_csv(PREPROCESSED_PATH)
-    # df["combined_text"] = df["blind assessment"].fillna("") + " " + df["bottom line"].fillna("")
+    df = pd.read_csv(PREPROCESSED_DATA_PATH)
     
-    model, vocabs = load_model_inference(MODEL_PATH, numerical_dim=10, device=DEVICE)
-    evaluate(model, test_df, vocabs, TRAINING_DATA_PATH, DEVICE)
+    model, vocabs = load_model_inference(TRAINED_MODEL_PATH, numerical_dim=10, device=DEVICE, model_location=SBERT_MODEL_DIR)
+    evaluate(model, df, vocabs, QUERIES_PATH, DEVICE, FAISS_INDEX_PATH)
