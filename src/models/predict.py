@@ -5,7 +5,7 @@ import faiss
 from tqdm import tqdm
 from src.models.evaluate import load_model_inference
 from src.models.utils import CoffeeDataset
-from src.config import PREPROCESSED_DATA_PATH, TRAINED_MODEL_PATH, SBERT_MODEL_DIR, FAISS_INDEX_PATH
+from src.config import PREPROCESSED_DATA_PATH, TRAINED_MODEL_PATH, SBERT_MODEL_DIR, FAISS_INDEX_PATH, EMBEDDINGS_PATH
 import time
 import argparse
 
@@ -73,17 +73,13 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run various prediction functions")
     parser.add_argument("--goal", type=str, choices=["predict", "create_index_or_embeddings"], help="'predict' means you want to get predictions for a query." \
         "This requires the additional argument 'query' and optional arguments 'query_recs' for saving the query recommendations to a csv and 'num_recommendations'." \
-        "' create_index_or_embedding' is self-explanatory. Provide additional arguments for 'faiss_output_file' or 'embedding_output_file'")
-    parser.add_argument("--faiss_output_file", type=str, default=None, help="Output path for the faiss index. Type: .bin")
-    parser.add_argument("--embedding_output_file", type=str, default=None, help="Output path for the raw numpy embeddings. Type: .npy")
+        "'create_index_or_embedding' is self-explanatory. Set FAISS_INDEX_PATH and EMBEDDINGS_PATH in config.py to save the index and embeddings respectively.")
     parser.add_argument("--query", type=str, default=None, help="Query to have recommendations provided for. Type: .txt")
     parser.add_argument("--query_recs", type=str, default=None, help="Save path for recommendations for the given user query")
     parser.add_argument("--num_recommendations", type=int, default=10, help="The number of recommendations you want. Type: positive integer")
     
     args = parser.parse_args()
     
-    INDEX_OUTPUT_PATH = args.faiss_output_file
-    EMBEDDINGS_OUTPUT_PATH = args.embedding_output_file
     QUERY_PATH = args.query
     QUERY_REC_PATH = args.query_recs
     TOP_K = args.num_recommendations
@@ -91,14 +87,14 @@ if __name__ == "__main__":
     if args.goal == "predict":
         assert(QUERY_PATH)
     else:
-        assert(INDEX_OUTPUT_PATH or EMBEDDINGS_OUTPUT_PATH)
+        assert(FAISS_INDEX_PATH or EMBEDDINGS_PATH)
+
     
     DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {DEVICE}")
 
     print("Loading Coffee Data...")
     df = pd.read_csv(PREPROCESSED_DATA_PATH)
-    # df["combined_text"] = df["blind assessment"].fillna("") + " " + df["bottom line"].fillna("")
     
     model, vocabs = load_model_inference(
         TRAINED_MODEL_PATH, 
@@ -131,10 +127,10 @@ if __name__ == "__main__":
         # build embeddings/search_index
         all_embeddings, search_index = build_search_index(model, df, vocabs, DEVICE)
         # save requested files
-        if INDEX_OUTPUT_PATH:
-            faiss.write_index(search_index, INDEX_OUTPUT_PATH)
-            print(f"Saved FAISS index to: {INDEX_OUTPUT_PATH}")
-        if EMBEDDINGS_OUTPUT_PATH:
-            np.save(EMBEDDINGS_OUTPUT_PATH, all_embeddings) 
-            print(f"Saved raw embeddings to: {EMBEDDINGS_OUTPUT_PATH}")
+        if FAISS_INDEX_PATH:
+            faiss.write_index(search_index, FAISS_INDEX_PATH)
+            print(f"Saved FAISS index to: {FAISS_INDEX_PATH}")
+        if EMBEDDINGS_PATH:
+            np.save(EMBEDDINGS_PATH, all_embeddings) 
+            print(f"Saved raw embeddings to: {EMBEDDINGS_PATH}")
     
