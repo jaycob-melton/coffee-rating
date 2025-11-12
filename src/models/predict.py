@@ -9,9 +9,10 @@ from src.config import PREPROCESSED_DATA_PATH, TRAINED_MODEL_PATH, SBERT_MODEL_D
 import time
 import argparse
 
-def build_embeddings(model, coffee_df, vocabs, device):
+def build_embeddings(model, coffee_df, vocabs, device, enc_only=False):
     """Encodes all coffees and saves the raw embeddings to a numpy file."""
     print("Building embeddings for all coffees...")
+    print(f"Using encoder only: {enc_only}")
     full_dataset = CoffeeDataset(coffee_df, vocabs)
     
     all_coffee_embeddings = []
@@ -34,16 +35,16 @@ def build_embeddings(model, coffee_df, vocabs, device):
                     'varietals_offsets': torch.tensor([0], dtype=torch.long).to(device),
                 }
             }
-            embedding = model.encode_coffees(coffee_batch)
+            embedding = model.encode_coffees(coffee_batch, enc_only=enc_only)
             all_coffee_embeddings.append(embedding.cpu().numpy())
             
     all_coffee_embeddings = np.vstack(all_coffee_embeddings)
     return all_coffee_embeddings
 
 
-def build_search_index(model, coffee_df, vocabs, device):
+def build_search_index(model, coffee_df, vocabs, device, enc_only=False):
     """Encodes all coffees and builds a searchable FAISS index."""
-    all_coffee_embeddings = build_embeddings(model, coffee_df, vocabs, device)
+    all_coffee_embeddings = build_embeddings(model, coffee_df, vocabs, device, enc_only=enc_only)
 
     print("Building search index for all coffees...")
     
@@ -75,15 +76,18 @@ if __name__ == "__main__":
         "This requires the additional argument 'query' and optional arguments 'query_recs' for saving the query recommendations to a csv and 'num_recommendations'." \
         "'create_index_or_embedding' is self-explanatory. Set FAISS_INDEX_PATH and EMBEDDINGS_PATH in config.py to save the index and embeddings respectively." \
         "'create_embeddings' will just create the embeddings and save them to EMBEDDINGS_PATH.")
+    parser.add_argument("--encoder_only", default=False, action='store_true', help="Whether to only create the text embeddings without the metadata. Only applies to 'create_index_or_embeddings' and 'create_embeddings' goals.")
     parser.add_argument("--query", type=str, default=None, help="Query to have recommendations provided for. Type: .txt")
     parser.add_argument("--query_recs", type=str, default=None, help="Save path for recommendations for the given user query")
     parser.add_argument("--num_recommendations", type=int, default=10, help="The number of recommendations you want. Type: positive integer")
     
     args = parser.parse_args()
     
+    ENC_ONLY = args.encoder_only
     QUERY_PATH = args.query
     QUERY_REC_PATH = args.query_recs
     TOP_K = args.num_recommendations
+    
     
     if args.goal == "predict":
         assert(QUERY_PATH)
@@ -128,7 +132,7 @@ if __name__ == "__main__":
 
     elif args.goal == "create_index_or_embeddings":
         # build embeddings/search_index
-        all_embeddings, search_index = build_search_index(model, df, vocabs, DEVICE)
+        all_embeddings, search_index = build_search_index(model, df, vocabs, DEVICE, enc_only=ENC_ONLY)
         # save requested files
         if FAISS_INDEX_PATH:
             faiss.write_index(search_index, str(FAISS_INDEX_PATH))
@@ -137,7 +141,7 @@ if __name__ == "__main__":
             np.save(EMBEDDINGS_PATH, all_embeddings) 
             print(f"Saved raw embeddings to: {EMBEDDINGS_PATH}")
     else: # generate just embeddings
-        all_embeddings = build_embeddings(model, df, vocabs, DEVICE)
+        all_embeddings = build_embeddings(model, df, vocabs, DEVICE, enc_only=ENC_ONLY)
         if EMBEDDINGS_PATH:
             np.save(EMBEDDINGS_PATH, all_embeddings) 
             print(f"Saved raw embeddings to: {EMBEDDINGS_PATH}")

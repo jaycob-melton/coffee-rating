@@ -88,9 +88,9 @@ class DualEncoder(nn.Module):
         # returns trainable embeddings
         return self._encode_texts(queries)
 
-    def encode_coffees(self, coffee_batch, sbert_only=False):
+    def encode_coffees(self, coffee_batch, enc_only=False):
         text_emb = self._encode_texts(coffee_batch["text"])
-        if sbert_only:
+        if enc_only:
             return text_emb
         metadata_emb = self.metadata_encoder(coffee_batch["numericals"], coffee_batch["categoricals"])
         return self.fusion_layer(torch.cat([text_emb, metadata_emb], dim=-1))
