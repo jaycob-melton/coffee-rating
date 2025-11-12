@@ -3,56 +3,63 @@ import numpy as np
 import torch
 import faiss
 from tqdm import tqdm
-from src.models.evaluate import load_model_inference
+# from src.models.evaluate import load_model_inference
 from src.models.utils import CoffeeDataset
-from src.config import PREPROCESSED_DATA_PATH, TRAINED_MODEL_PATH, SBERT_MODEL_DIR, FAISS_INDEX_PATH, EMBEDDINGS_PATH
+from src.models.model_utils import load_model, build_embeddings, build_search_index
+from src.config import (
+    PREPROCESSED_DATA_PATH, 
+    TRAINED_MODEL_PATH, 
+    SBERT_MODEL_DIR, 
+    FAISS_INDEX_PATH, 
+    EMBEDDINGS_PATH
+)
 import time
 import argparse
 
-def build_embeddings(model, coffee_df, vocabs, device, enc_only=False):
-    """Encodes all coffees and saves the raw embeddings to a numpy file."""
-    print("Building embeddings for all coffees...")
-    print(f"Using encoder only: {enc_only}")
-    full_dataset = CoffeeDataset(coffee_df, vocabs)
+# def build_embeddings(model, coffee_df, vocabs, device, enc_only=False):
+#     """Encodes all coffees and saves the raw embeddings to a numpy file."""
+#     print("Building embeddings for all coffees...")
+#     print(f"Using encoder only: {enc_only}")
+#     full_dataset = CoffeeDataset(coffee_df, vocabs)
     
-    all_coffee_embeddings = []
-    with torch.no_grad():
-        for i in tqdm(range(len(full_dataset)), desc="Encoding all coffees"):
-            text, numericals, categoricals = full_dataset[i]
+#     all_coffee_embeddings = []
+#     with torch.no_grad():
+#         for i in tqdm(range(len(full_dataset)), desc="Encoding all coffees"):
+#             text, numericals, categoricals = full_dataset[i]
             
-            coffee_batch = {
-                'text': [text],
-                'numericals': numericals.unsqueeze(0).to(device),
-                'categoricals': {
-                    'roast level': categoricals['roast level'].unsqueeze(0).to(device),
-                    'test_method': categoricals['test_method'].unsqueeze(0).to(device),
-                    'price_tier': categoricals['price_tier'].unsqueeze(0).to(device),
-                    'countries_extracted': categoricals['countries_extracted'].to(device),
-                    'countries_extracted_offsets': torch.tensor([0], dtype=torch.long).to(device),
-                    'process': categoricals['process'].to(device),
-                    'process_offsets': torch.tensor([0], dtype=torch.long).to(device),
-                    'varietals': categoricals['varietals'].to(device),
-                    'varietals_offsets': torch.tensor([0], dtype=torch.long).to(device),
-                }
-            }
-            embedding = model.encode_coffees(coffee_batch, enc_only=enc_only)
-            all_coffee_embeddings.append(embedding.cpu().numpy())
+#             coffee_batch = {
+#                 'text': [text],
+#                 'numericals': numericals.unsqueeze(0).to(device),
+#                 'categoricals': {
+#                     'roast level': categoricals['roast level'].unsqueeze(0).to(device),
+#                     'test_method': categoricals['test_method'].unsqueeze(0).to(device),
+#                     'price_tier': categoricals['price_tier'].unsqueeze(0).to(device),
+#                     'countries_extracted': categoricals['countries_extracted'].to(device),
+#                     'countries_extracted_offsets': torch.tensor([0], dtype=torch.long).to(device),
+#                     'process': categoricals['process'].to(device),
+#                     'process_offsets': torch.tensor([0], dtype=torch.long).to(device),
+#                     'varietals': categoricals['varietals'].to(device),
+#                     'varietals_offsets': torch.tensor([0], dtype=torch.long).to(device),
+#                 }
+#             }
+#             embedding = model.encode_coffees(coffee_batch, enc_only=enc_only)
+#             all_coffee_embeddings.append(embedding.cpu().numpy())
             
-    all_coffee_embeddings = np.vstack(all_coffee_embeddings)
-    return all_coffee_embeddings
+#     all_coffee_embeddings = np.vstack(all_coffee_embeddings)
+#     return all_coffee_embeddings
 
 
-def build_search_index(model, coffee_df, vocabs, device, enc_only=False):
-    """Encodes all coffees and builds a searchable FAISS index."""
-    all_coffee_embeddings = build_embeddings(model, coffee_df, vocabs, device, enc_only=enc_only)
+# def build_search_index(model, coffee_df, vocabs, device, enc_only=False):
+#     """Encodes all coffees and builds a searchable FAISS index."""
+#     all_coffee_embeddings = build_embeddings(model, coffee_df, vocabs, device, enc_only=enc_only)
 
-    print("Building search index for all coffees...")
+#     print("Building search index for all coffees...")
     
-    index = faiss.IndexFlatIP(768)
-    faiss.normalize_L2(all_coffee_embeddings)
-    index.add(all_coffee_embeddings)
-    print(f"FAISS index built with {index.ntotal} vectors.")
-    return all_coffee_embeddings, index
+#     index = faiss.IndexFlatIP(768)
+#     faiss.normalize_L2(all_coffee_embeddings)
+#     index.add(all_coffee_embeddings)
+#     print(f"FAISS index built with {index.ntotal} vectors.")
+#     return all_coffee_embeddings, index
 
 
 def get_recommendations(query, model, index, coffee_df, top_k=5):
@@ -76,15 +83,16 @@ if __name__ == "__main__":
         "This requires the additional argument 'query' and optional arguments 'query_recs' for saving the query recommendations to a csv and 'num_recommendations'." \
         "'create_index_or_embedding' is self-explanatory. Set FAISS_INDEX_PATH and EMBEDDINGS_PATH in config.py to save the index and embeddings respectively." \
         "'create_embeddings' will just create the embeddings and save them to EMBEDDINGS_PATH.")
-    parser.add_argument("--encoder_only", default=False, action='store_true', help="Whether to only create the text embeddings without the metadata. Only applies to 'create_index_or_embeddings' and 'create_embeddings' goals.")
-    parser.add_argument("--untrained", default=False, action='store_true', help="Whether to use an untrained model for creating the index/embeddings.")
+    # this should be done in config
+    # parser.add_argument("--encoder_only", default=False, action='store_true', help="Whether to only create the text embeddings without the metadata. Only applies to 'create_index_or_embeddings' and 'create_embeddings' goals.")
+    # parser.add_argument("--untrained", default=False, action='store_true', help="Whether to use an untrained model for creating the index/embeddings.")
     parser.add_argument("--query", type=str, default=None, help="Query to have recommendations provided for. Type: .txt")
     parser.add_argument("--query_recs", type=str, default=None, help="Save path for recommendations for the given user query")
     parser.add_argument("--num_recommendations", type=int, default=10, help="The number of recommendations you want. Type: positive integer")
     
     args = parser.parse_args()
     
-    ENC_ONLY = args.encoder_only
+    # ENC_ONLY = args.encoder_only
     UNTRAINED = args.untrained
     QUERY_PATH = args.query
     QUERY_REC_PATH = args.query_recs
@@ -106,11 +114,13 @@ if __name__ == "__main__":
     df = pd.read_csv(PREPROCESSED_DATA_PATH)
     
     
-    model, vocabs = load_model_inference(
+    model, vocabs = load_model(
         TRAINED_MODEL_PATH, 
         numerical_dim=10, 
         device=DEVICE,           
-        model_location=SBERT_MODEL_DIR
+        model_arch_path=SBERT_MODEL_DIR,
+        model_weights_path=None if UNTRAINED else TRAINED_MODEL_PATH,
+        eval=True
     )
     
     if args.goal == "predict":

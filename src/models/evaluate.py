@@ -8,24 +8,17 @@ import re
 import os
 from tqdm import tqdm
 from src.models.utils import CoffeeDataset, to_list
+from src.models.model_utils import load_model
 from src.models.model import DualEncoder
-from src.config import QUERIES_PATH, SBERT_MODEL_DIR, PREPROCESSED_DATA_PATH, TRAINED_MODEL_PATH, EMBEDDINGS_PATH, FAISS_INDEX_PATH
-
-def load_model_inference(model_path: str, numerical_dim: int, device, model_location="sentence-transformers/all-mpnet-base-v2"):
-    """
-    Loads a trained model from a .pth file for inference, i.e. evaluation
-    """
-    checkpoint = torch.load(model_path, map_location=device)
-    
-    vocabs = checkpoint["vocabs"]
-
-    model = DualEncoder(vocabs, numerical_dim, model_location)
-    model.load_state_dict(checkpoint["model_state_dict"])
-    model.to(device)
-    model.eval()
-    
-    print(f"Model loaded from {model_path} and set to evaluation mode.")
-    return model, vocabs
+from src.config import (
+    QUERIES_PATH, 
+    SBERT_MODEL_DIR, 
+    PREPROCESSED_DATA_PATH, 
+    TRAINED_MODEL_PATH, 
+    EMBEDDINGS_PATH, 
+    FAISS_INDEX_PATH,
+    VOCABS_PATH
+)
 
 
 ATTRIBUTE_WEIGHTS = {
@@ -110,8 +103,6 @@ def calculate_relevance(query: str, coffee_row: pd.Series) -> int:
     return 0
 
 
-
-
 def calculate_ndcg(relevance_scores: list, k: int) -> float:
     """
     Calculates NDCG@k for a list of relevance scores
@@ -176,7 +167,7 @@ def evaluate(model, test_df, vocabs, training_data_path, device, precomputed_ind
         index = faiss.read_index(str(FAISS_INDEX_PATH))
 
     # generate the test queries and evaluate
-    print("Generating test queries and evaluating recall...")
+    print("Getting test queries and evaluating recall and ndcg...")
     test_queries = []
     test_ground_truth = []
     test_id2idx = {cid: i for i, cid in test_df["id"].items()}
@@ -236,13 +227,19 @@ def evaluate(model, test_df, vocabs, training_data_path, device, precomputed_ind
     return np.mean(ndcg_10_scores), hits_at_1 / total_queries, hits_at_5 / total_queries, hits_at_10 / total_queries
 
 
-
-
 if __name__ == "__main__":
     DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print("Device:", DEVICE)
     print("Loading Coffee Data...")
     df = pd.read_csv(PREPROCESSED_DATA_PATH)
     
-    model, vocabs = load_model_inference(TRAINED_MODEL_PATH, numerical_dim=10, device=DEVICE, model_location=SBERT_MODEL_DIR)
+    # model, vocabs = load_model_inference(TRAINED_MODEL_PATH, numerical_dim=10, device=DEVICE, model_location=SBERT_MODEL_DIR)
+    model, vocabs = load_model(
+        VOCABS_PATH, 
+        numerical_dim=10, 
+        device=DEVICE, 
+        model_arch_path=SBERT_MODEL_DIR, 
+        model_weights_path=TRAINED_MODEL_PATH, 
+        eval=True
+    )
     evaluate(model, df, vocabs, QUERIES_PATH, DEVICE, FAISS_INDEX_PATH)

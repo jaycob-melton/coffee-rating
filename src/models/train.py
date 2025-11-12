@@ -22,31 +22,13 @@ from src.config import (
     today
 )
 
-torch.manual_seed(189)  # for reproducibility
-
-# def load_model_train(model_path: str, numerical_dim: int, device):
-#     """
-#     Loads a trained model from a .pth file for inference, i.e. evaluation
-#     """
-#     checkpoint = torch.load(model_path, map_location=device)
-    
-#     vocabs = checkpoint["vocabs"]
-
-#     model = DualEncoder(vocabs, numerical_dim)
-#     model.load_state_dict(checkpoint["model_state_dict"])
-#     model.to(device)
-#     # model.eval()
-    
-#     print(f"Model loaded from {model_path}")
-#     return model, vocabs
+#torch.manual_seed(189)  # for reproducibility
 
 def train(config):
-    device = config["device"] #torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = config["device"] 
     print(f"Using device: {device}")
 
     # Load data
-    # df = pd.read_csv(config["preprocessed_data_path"])
-    # df["combined_text"] = df["blind assessment"].fillna() + " " + df["bottom line"].fillna("")
     df = pd.read_csv(config["preprocessed_data"])
     with open(config["vocabs"], 'r') as f:
         vocabs = json.load(f)
@@ -65,12 +47,6 @@ def train(config):
         collate_fn=lambda batch: collate(batch, full_coffee_dataset)
     )
 
-    # model, loss, optimizer
-    # if config["model_path"]:
-    #     model, vocabs = load_model_train(config["model_path"], numerical_dim=len(full_coffee_dataset.numerical_cols), device=device)
-    # else:
-    #     model = DualEncoder(vocabs, numerical_dim=len(full_coffee_dataset.numerical_cols)).to(device)
-
     model, _ = load_model(
         vocabs_path=config["vocabs"],
         numerical_dim=len(full_coffee_dataset.numerical_cols),
@@ -88,8 +64,6 @@ def train(config):
         {"params": transformer_params, "lr": config["transformer_lr"]},
         {"params": head_params, "lr": config["head_lr"]}
     ])
-    
-    # optimizer = AdamW(model.parameters(), lr=config["learning_rate"])
 
     print("Starting training...")
     loss_info = {
@@ -194,37 +168,13 @@ def train(config):
         if use_semi_hard_mining:
             print(f"Number of Semi-hard Negatives Used: {num_semi_hard}")
 
-        # checkpoint = {
-        #     "model_state_dict": model.state_dict(),
-        #     "vocabs": vocabs,
-        #     "loss": loss_info["loss"],
-        # }
         torch.save(model.state_dict(), f"{config['save_path']}{epoch+1}.pth")
     
     return loss_info
 
 
 if __name__ == "__main__":
-    # PREPROCESSED_PATH = "data/processed/preprocessed_data.csv"
-    # TRAINING_DATA_PATH = "data/processed/training_data.jsonl"
-    # MODEL_PATH = "coffee_model_simpleadam_epoch_10.pth"
-
     DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-    # print("Loading Coffee Data...")
-    # df = pd.read_csv(PREPROCESSED_PATH)
-    # df["combined_text"] = df["blind assessment"].fillna("") + " " + df["bottom line"].fillna("")
-    
-    # print("Creating 80/20 train-test split...")
-    # train_df, test_df = train_test_split(df, test_size=0.2, random_state=189)
-    # train_df = train_df.reset_index(drop=True)
-    # test_df = test_df.reset_index(drop=True)
-    
-    # train_df.to_csv("data/processed/train_data_8_11.csv", index=False)
-    # test_df.to_csv("data/processed/test_data_8_11.csv", index=False)
-
-    # vocabs = build_all_vocabs(train_df)
-
 
     config = {
         # Data paths
@@ -234,7 +184,7 @@ if __name__ == "__main__":
 
         # Model paths
         "enc_model_path": SBERT_MODEL_DIR,
-        "model_path": None,#TRAINED_MODEL_PATH,
+        "model_path": TRAINED_MODEL_PATH,
         "save_path": MODEL_SAVE_PATH,
 
         # Training hyperparameters
