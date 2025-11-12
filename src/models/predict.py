@@ -77,6 +77,7 @@ if __name__ == "__main__":
         "'create_index_or_embedding' is self-explanatory. Set FAISS_INDEX_PATH and EMBEDDINGS_PATH in config.py to save the index and embeddings respectively." \
         "'create_embeddings' will just create the embeddings and save them to EMBEDDINGS_PATH.")
     parser.add_argument("--encoder_only", default=False, action='store_true', help="Whether to only create the text embeddings without the metadata. Only applies to 'create_index_or_embeddings' and 'create_embeddings' goals.")
+    parser.add_argument("--untrained", default=False, action='store_true', help="Whether to use an untrained model for creating the index/embeddings.")
     parser.add_argument("--query", type=str, default=None, help="Query to have recommendations provided for. Type: .txt")
     parser.add_argument("--query_recs", type=str, default=None, help="Save path for recommendations for the given user query")
     parser.add_argument("--num_recommendations", type=int, default=10, help="The number of recommendations you want. Type: positive integer")
@@ -84,6 +85,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     
     ENC_ONLY = args.encoder_only
+    UNTRAINED = args.untrained
     QUERY_PATH = args.query
     QUERY_REC_PATH = args.query_recs
     TOP_K = args.num_recommendations
@@ -102,6 +104,7 @@ if __name__ == "__main__":
 
     print("Loading Coffee Data...")
     df = pd.read_csv(PREPROCESSED_DATA_PATH)
+    
     
     model, vocabs = load_model_inference(
         TRAINED_MODEL_PATH, 

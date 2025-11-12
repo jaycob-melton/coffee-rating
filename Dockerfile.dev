@@ -20,6 +20,7 @@ COPY requirements.txt .
 
 RUN pip install --no-cache-dir -r requirements.txt
 
+COPY src/config.py src/
 COPY src/app/app.py src/app/
 COPY src/app/templates/index_local.html src/app/templates/
 COPY src/models/model.py src/models/
