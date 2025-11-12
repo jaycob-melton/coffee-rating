@@ -1,3 +1,4 @@
+import json
 import random
 import pandas as pd
 import torch
@@ -8,7 +9,8 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 from sklearn.model_selection import train_test_split
 from src.models.utils import CoffeeDataset, TripleTrainingDataset, collate
-from src.models.model import DualEncoder
+# from src.models.model import DualEncoder
+from src.models.model_utils import load_model
 from src.config import (
     TRAIN_DATA_PATH,
     VOCABS_PATH,
@@ -16,43 +18,44 @@ from src.config import (
     SBERT_MODEL_DIR,
     TRAINED_MODEL_PATH,
     MODEL_SAVE_PATH,
-    TRAIN_PARAMS
+    TRAIN_PARAMS,
+    today
 )
 
 torch.manual_seed(189)  # for reproducibility
 
-def load_model_train(model_path: str, numerical_dim: int, device):
-    """
-    Loads a trained model from a .pth file for inference, i.e. evaluation
-    """
-    checkpoint = torch.load(model_path, map_location=device)
+# def load_model_train(model_path: str, numerical_dim: int, device):
+#     """
+#     Loads a trained model from a .pth file for inference, i.e. evaluation
+#     """
+#     checkpoint = torch.load(model_path, map_location=device)
     
-    vocabs = checkpoint["vocabs"]
+#     vocabs = checkpoint["vocabs"]
 
-    model = DualEncoder(vocabs, numerical_dim)
-    model.load_state_dict(checkpoint["model_state_dict"])
-    model.to(device)
-    # model.eval()
+#     model = DualEncoder(vocabs, numerical_dim)
+#     model.load_state_dict(checkpoint["model_state_dict"])
+#     model.to(device)
+#     # model.eval()
     
-    print(f"Model loaded from {model_path}")
-    return model, vocabs
-
+#     print(f"Model loaded from {model_path}")
+#     return model, vocabs
 
 def train(config):
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = config["device"] #torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
 
     # Load data
     # df = pd.read_csv(config["preprocessed_data_path"])
     # df["combined_text"] = df["blind assessment"].fillna() + " " + df["bottom line"].fillna("")
-    df = config["preprocessed_data"]
-    vocabs = config["vocabs"]
+    df = pd.read_csv(config["preprocessed_data"])
+    with open(config["vocabs"], 'r') as f:
+        vocabs = json.load(f)
 
     # used by collate to look up coffee data by index
     full_coffee_dataset = CoffeeDataset(df, vocabs)
 
     # provides thje (query, positive_idx) pairs for training
-    train_dataset = TripleTrainingDataset(config["queries_path"], df)
+    train_dataset = TripleTrainingDataset(str(config["queries_path"]), df)
 
 
     train_loader = DataLoader(
@@ -68,7 +71,7 @@ def train(config):
     # else:
     #     model = DualEncoder(vocabs, numerical_dim=len(full_coffee_dataset.numerical_cols)).to(device)
 
-    model, _ = build_model(
+    model, _ = load_model(
         vocabs_path=config["vocabs"],
         numerical_dim=len(full_coffee_dataset.numerical_cols),
         device=device,
@@ -226,22 +229,25 @@ if __name__ == "__main__":
     config = {
         # Data paths
         "preprocessed_data": TRAIN_DATA_PATH,
-        "query_path": QUERIES_PATH,
+        "queries_path": QUERIES_PATH,
         "vocabs": VOCABS_PATH,
 
         # Model paths
         "enc_model_path": SBERT_MODEL_DIR,
-        "model_path": TRAINED_MODEL_PATH,
+        "model_path": None,#TRAINED_MODEL_PATH,
         "save_path": MODEL_SAVE_PATH,
 
+        # Training hyperparameters
         "batch_size": TRAIN_PARAMS["batch_size"],
         "transformer_lr": TRAIN_PARAMS["transformer_lr"],
         "head_lr": TRAIN_PARAMS["head_lr"],
         "epochs": TRAIN_PARAMS["num_epochs"],
         "margin": TRAIN_PARAMS["margin"],
         "semi_hard_mining_start_epoch": TRAIN_PARAMS["semi_hard_mining_start_epoch"],
+
+        "device": DEVICE
     }
 
     loss_info = train(config)
 
-    pd.DataFrame(loss_info).to_csv("data/outputs/loss-info/loss_info_8_11.csv", index=False)
+    pd.DataFrame(loss_info).to_csv(f"data/outputs/loss-info/loss_info_{today.month}_{today.day}.csv", index=False)

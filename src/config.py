@@ -20,14 +20,16 @@ SBERT_MODEL_DIR = MODELS_DIR / "sbert_model" # set to "sentence-transformers/all
 
 RAW_DATA_PATH = RAW_DIR / "full_data_scrape.csv"
 PREPROCESSED_DATA_PATH = PROCESSED_DIR / "preprocessed_data.csv"
-TRAIN_DATA_PATH = PROCESSED_DIR / "train_data_8_11_test.csv"
-TEST_DATA_PATH = PROCESSED_DIR / "test_data_8_11_test.csv"
+TRAIN_DATA_PATH = PROCESSED_DIR / "train_data_8_11.csv"
+TEST_DATA_PATH = PROCESSED_DIR / "test_data_8_11.csv"
 FAISS_INDEX_PATH = FAISS_DIR / "encoder_only_trained_faiss_index.bin"#"faiss_index.bin"
 EMBEDDINGS_PATH = EMBEDDINGS_DIR / "encoder_only_trained_embeddings.npy"
 TRAINED_MODEL_PATH = MODEL_WEIGHTS_DIR / "8-11" / "coffee_model_epoch_11_semi_hard_3.pth"
 QUERIES_PATH = DATA_DIR / "outputs" / "llm-queries" / "synthetic_queries_np_4_1_nano.jsonl"
 VOCABS_PATH = MODELS_DIR / "vocabs" / "8-11_vocabs.json"
-MODEL_SAVE_PATH = MODEL_WEIGHTS_DIR / str(today.month) + "-" + str(today.day) / "coffee_model_epoch_"
+MODEL_SAVE_DIR = MODEL_WEIGHTS_DIR / f"{today.month}-{today.day}"
+MODEL_SAVE_DIR.mkdir(parents=True, exist_ok=True)
+MODEL_SAVE_PATH = MODEL_SAVE_DIR / "coffee_model_epoch_"
 
 # MODEL HYPERPARAMS
 TRAIN_PARAMS = {
