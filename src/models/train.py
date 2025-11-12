@@ -7,10 +7,9 @@ import torch.nn.functional as F
 from torch.optim import AdamW
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-from sklearn.model_selection import train_test_split
 from src.models.utils import CoffeeDataset, TripleTrainingDataset, collate
 # from src.models.model import DualEncoder
-from src.models.model_utils import load_model
+from src.models.model_utils import load_vocabs, load_model
 from src.config import (
     TRAIN_DATA_PATH,
     VOCABS_PATH,
@@ -19,50 +18,57 @@ from src.config import (
     TRAINED_MODEL_PATH,
     MODEL_SAVE_PATH,
     TRAIN_PARAMS,
+    MODEL_PARAMS,
     today
 )
 
 #torch.manual_seed(189)  # for reproducibility
 
-def train(config):
-    device = config["device"] 
+def train(device):
     print(f"Using device: {device}")
 
     # Load data
-    df = pd.read_csv(config["preprocessed_data"])
-    with open(config["vocabs"], 'r') as f:
-        vocabs = json.load(f)
+    df = pd.read_csv(TRAIN_DATA_PATH)
+    vocabs = load_vocabs(VOCABS_PATH)
 
     # used by collate to look up coffee data by index
     full_coffee_dataset = CoffeeDataset(df, vocabs)
 
     # provides thje (query, positive_idx) pairs for training
-    train_dataset = TripleTrainingDataset(str(config["queries_path"]), df)
+    train_dataset = TripleTrainingDataset(str(QUERIES_PATH), df)
 
 
     train_loader = DataLoader(
         train_dataset,
-        batch_size = config["batch_size"],
+        batch_size = TRAIN_PARAMS["batch_size"],
         shuffle=True,
         collate_fn=lambda batch: collate(batch, full_coffee_dataset)
     )
 
-    model, _ = load_model(
-        vocabs_path=config["vocabs"],
+    model = load_model(
+        vocabs=vocabs,
         numerical_dim=len(full_coffee_dataset.numerical_cols),
+        encoder_only=MODEL_PARAMS["encoder_only"],
         device=device,
-        model_arch_path=config["enc_model_path"],
-        model_weights_path=config["model_path"],
+        model_arch_path=SBERT_MODEL_DIR,
+        model_weights_path=TRAINED_MODEL_PATH,
     )
 
-    loss_fn = nn.TripletMarginLoss(margin=config["margin"])
+    loss_fn = nn.TripletMarginLoss(margin=TRAIN_PARAMS["margin"])
 
     transformer_params = model.transformer.parameters()
-    head_params = list(model.metadata_encoder.parameters()) + list(model.fusion_layer.parameters())
+    if model.encoder_only:
+        print("Training with encoder only. No head parameters will be updated.")
+        head_params = []
+        head_lr = 0.
+    else:
+        print("Training with full model. Head parameters will be updated.")
+        head_params = list(model.metadata_encoder.parameters()) + list(model.fusion_layer.parameters())
+        head_lr = TRAIN_PARAMS["head_lr"]
 
     optimizer = AdamW([
-        {"params": transformer_params, "lr": config["transformer_lr"]},
-        {"params": head_params, "lr": config["head_lr"]}
+        {"params": transformer_params, "lr": TRAIN_PARAMS["transformer_lr"]},
+        {"params": head_params, "lr": head_lr}
     ])
 
     print("Starting training...")
@@ -71,12 +77,12 @@ def train(config):
         "semi_hard_negatives": [],
     }
 
-    for epoch in range(config["epochs"]):
+    for epoch in range(TRAIN_PARAMS["num_epochs"]):
         model.train()
         total_loss = 0
         num_semi_hard = 0
-        if config["semi_hard_mining_start_epoch"]:
-            use_semi_hard_mining = epoch >= config["semi_hard_mining_start_epoch"]
+        if TRAIN_PARAMS["semi_hard_mining_start_epoch"]:
+            use_semi_hard_mining = epoch >= TRAIN_PARAMS["semi_hard_mining_start_epoch"]
         else:
             last_4_losses = loss_info["loss"][-4:] if len(loss_info["loss"]) >= 4 else []
             last_3_relative_diff = [
@@ -86,11 +92,10 @@ def train(config):
             use_semi_hard_mining = len(last_4_losses) >= 4 and all(loss < 0.02 for loss in last_3_relative_diff) 
 
         if use_semi_hard_mining:
-            print(f"Epoch {epoch+1}/{config['epochs']} - Using Semi-Hard Negative Mining")
+            print(f"Epoch {epoch+1}/{TRAIN_PARAMS['num_epochs']} - Using Semi-Hard Negative Mining")
 
         else:
-            print(f"Epoch {epoch+1}/{config['epochs']} - Using In-Batch Negative Mining")
-
+            print(f"Epoch {epoch+1}/{TRAIN_PARAMS['num_epochs']} - Using In-Batch Negative Mining")
         for queries, positive_indices, positive_coffee_batch in tqdm(train_loader, desc=f"Epoch {epoch+1}"):
             for key, val in positive_coffee_batch.items():
                 if isinstance(val, torch.Tensor):
@@ -102,16 +107,17 @@ def train(config):
             # forward pass
             query_embeddings = model.encode_queries(queries).to(device)
             # debugging
-            with torch.no_grad():
-                for col in ["countries_extracted", "process", "varietals"]:
-                    idxs = positive_coffee_batch["categoricals"][col]
-                    max_idx = int(idxs.max().item()) if idxs.numel() else -1
-                    num_rows = model.metadata_encoder.__getattr__(f"{col.split('_')[0]}_embed").num_embeddings
-                    if max_idx >= num_rows:
-                        raise ValueError(
-                            f"{col}: max idx {max_idx} >= num_rows {num_rows} "
-                            f"(offsets: {positive_coffee_batch['categoricals'][col + '_offsets']})"
-                        )
+            if not model.encoder_only:
+                with torch.no_grad():
+                    for col in ["countries_extracted", "process", "varietals"]:
+                        idxs = positive_coffee_batch["categoricals"][col]
+                        max_idx = int(idxs.max().item()) if idxs.numel() else -1
+                        num_rows = model.metadata_encoder.__getattr__(f"{col.split('_')[0]}_embed").num_embeddings
+                        if max_idx >= num_rows:
+                            raise ValueError(
+                                f"{col}: max idx {max_idx} >= num_rows {num_rows} "
+                                f"(offsets: {positive_coffee_batch['categoricals'][col + '_offsets']})"
+                            )
 
             positive_embeddings = model.encode_coffees(positive_coffee_batch)
             
@@ -135,7 +141,7 @@ def train(config):
                     neg_dists[i] = float("inf")
 
                     # find semi-hard negatives; negatives that are harder than the positive by violate the margin
-                    semi_hard_mask = (neg_dists > pos_dist) & (neg_dists < pos_dist + config["margin"])
+                    semi_hard_mask = (neg_dists > pos_dist) & (neg_dists < pos_dist + TRAIN_PARAMS["margin"])
 
                     if semi_hard_mask.any():
                         semi_hard_indices = torch.where(semi_hard_mask)[0]
@@ -168,7 +174,11 @@ def train(config):
         if use_semi_hard_mining:
             print(f"Number of Semi-hard Negatives Used: {num_semi_hard}")
 
-        torch.save(model.state_dict(), f"{config['save_path']}{epoch+1}.pth")
+        torch.save(model.state_dict(), f"{MODEL_SAVE_PATH}{epoch+1}.pth")
+
+    if DEVICE.type == "cuda":
+        del model
+        torch.cuda.empty_cache()
     
     return loss_info
 
@@ -176,28 +186,30 @@ def train(config):
 if __name__ == "__main__":
     DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    config = {
-        # Data paths
-        "preprocessed_data": TRAIN_DATA_PATH,
-        "queries_path": QUERIES_PATH,
-        "vocabs": VOCABS_PATH,
+    # config = {
+    #     # Data paths
+    #     "preprocessed_data": TRAIN_DATA_PATH,
+    #     "queries_path": QUERIES_PATH,
+    #     "vocabs": VOCABS_PATH,
 
-        # Model paths
-        "enc_model_path": SBERT_MODEL_DIR,
-        "model_path": TRAINED_MODEL_PATH,
-        "save_path": MODEL_SAVE_PATH,
+    #     # Model paths
+    #     "enc_model_path": SBERT_MODEL_DIR,
+    #     "model_path": None,#TRAINED_MODEL_PATH,
+    #     "save_path": MODEL_SAVE_PATH,
 
-        # Training hyperparameters
-        "batch_size": TRAIN_PARAMS["batch_size"],
-        "transformer_lr": TRAIN_PARAMS["transformer_lr"],
-        "head_lr": TRAIN_PARAMS["head_lr"],
-        "epochs": TRAIN_PARAMS["num_epochs"],
-        "margin": TRAIN_PARAMS["margin"],
-        "semi_hard_mining_start_epoch": TRAIN_PARAMS["semi_hard_mining_start_epoch"],
+    #     # Training hyperparameters
+    #     "batch_size": TRAIN_PARAMS["batch_size"],
+    #     "transformer_lr": TRAIN_PARAMS["transformer_lr"],
+    #     "head_lr": TRAIN_PARAMS["head_lr"],
+    #     "epochs": TRAIN_PARAMS["num_epochs"],
+    #     "margin": TRAIN_PARAMS["margin"],
+    #     "semi_hard_mining_start_epoch": TRAIN_PARAMS["semi_hard_mining_start_epoch"],
 
-        "device": DEVICE
-    }
+    #     "device": DEVICE
+    # }
 
-    loss_info = train(config)
+    loss_info = train(DEVICE)
 
     pd.DataFrame(loss_info).to_csv(f"data/outputs/loss-info/loss_info_{today.month}_{today.day}.csv", index=False)
+
+    

@@ -49,18 +49,28 @@ class MetadataEncoder(nn.Module):
 
 
 class DualEncoder(nn.Module):
-    def __init__(self, vocabs, numerical_dim, text_model_name="sentence-transformers/all-mpnet-base-v2",
+    def __init__(self, vocabs, numerical_dim, encoder_only=False,text_model_name="sentence-transformers/all-mpnet-base-v2",
                  embedding_dim=768, max_length=256):
         super().__init__()
         # Hugging Face model + tokenizer (trainable)
+        self.encoder_only = encoder_only
+
         self.tokenizer = AutoTokenizer.from_pretrained(text_model_name, use_fast=True)
         self.transformer = AutoModel.from_pretrained(text_model_name)
         self.text_hidden = self.transformer.config.hidden_size  
-
-        self.metadata_encoder = MetadataEncoder(vocabs, numerical_dim)
-        self.fusion_layer = nn.Linear(self.text_hidden + self.metadata_encoder.output_dim, embedding_dim)
-
         self.max_length = max_length
+
+        if not encoder_only:
+            self.numerical_dim = numerical_dim
+            self.metadata_encoder = MetadataEncoder(vocabs, numerical_dim)
+            self.fusion_layer = nn.Linear(self.text_hidden + self.metadata_encoder.output_dim, embedding_dim)
+            print("DualEncoder initialized in 'full' mode (with metadata).")
+        else:
+            self.numerical_dim = 0
+            self.metadata_encoder = None
+            self.fusion_layer = None
+            print("DualEncoder initialized in 'encoder-only' mode (without metadata).")
+
 
     @staticmethod
     def _mean_pool(last_hidden_state, attention_mask):
@@ -88,9 +98,9 @@ class DualEncoder(nn.Module):
         # returns trainable embeddings
         return self._encode_texts(queries)
 
-    def encode_coffees(self, coffee_batch, enc_only=False):
+    def encode_coffees(self, coffee_batch):
         text_emb = self._encode_texts(coffee_batch["text"])
-        if enc_only:
+        if self.encoder_only:
             return text_emb
         metadata_emb = self.metadata_encoder(coffee_batch["numericals"], coffee_batch["categoricals"])
         return self.fusion_layer(torch.cat([text_emb, metadata_emb], dim=-1))

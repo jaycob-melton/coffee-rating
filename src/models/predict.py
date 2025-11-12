@@ -5,63 +5,17 @@ import faiss
 from tqdm import tqdm
 # from src.models.evaluate import load_model_inference
 from src.models.utils import CoffeeDataset
-from src.models.model_utils import load_model, build_embeddings, build_search_index
+from src.models.model_utils import load_vocabs, load_model
 from src.config import (
     PREPROCESSED_DATA_PATH, 
     TRAINED_MODEL_PATH, 
     SBERT_MODEL_DIR, 
     FAISS_INDEX_PATH, 
-    EMBEDDINGS_PATH,
     VOCABS_PATH,    
     MODEL_PARAMS
 )
 import time
 import argparse
-
-# def build_embeddings(model, coffee_df, vocabs, device, enc_only=False):
-#     """Encodes all coffees and saves the raw embeddings to a numpy file."""
-#     print("Building embeddings for all coffees...")
-#     print(f"Using encoder only: {enc_only}")
-#     full_dataset = CoffeeDataset(coffee_df, vocabs)
-    
-#     all_coffee_embeddings = []
-#     with torch.no_grad():
-#         for i in tqdm(range(len(full_dataset)), desc="Encoding all coffees"):
-#             text, numericals, categoricals = full_dataset[i]
-            
-#             coffee_batch = {
-#                 'text': [text],
-#                 'numericals': numericals.unsqueeze(0).to(device),
-#                 'categoricals': {
-#                     'roast level': categoricals['roast level'].unsqueeze(0).to(device),
-#                     'test_method': categoricals['test_method'].unsqueeze(0).to(device),
-#                     'price_tier': categoricals['price_tier'].unsqueeze(0).to(device),
-#                     'countries_extracted': categoricals['countries_extracted'].to(device),
-#                     'countries_extracted_offsets': torch.tensor([0], dtype=torch.long).to(device),
-#                     'process': categoricals['process'].to(device),
-#                     'process_offsets': torch.tensor([0], dtype=torch.long).to(device),
-#                     'varietals': categoricals['varietals'].to(device),
-#                     'varietals_offsets': torch.tensor([0], dtype=torch.long).to(device),
-#                 }
-#             }
-#             embedding = model.encode_coffees(coffee_batch, enc_only=enc_only)
-#             all_coffee_embeddings.append(embedding.cpu().numpy())
-            
-#     all_coffee_embeddings = np.vstack(all_coffee_embeddings)
-#     return all_coffee_embeddings
-
-
-# def build_search_index(model, coffee_df, vocabs, device, enc_only=False):
-#     """Encodes all coffees and builds a searchable FAISS index."""
-#     all_coffee_embeddings = build_embeddings(model, coffee_df, vocabs, device, enc_only=enc_only)
-
-#     print("Building search index for all coffees...")
-    
-#     index = faiss.IndexFlatIP(768)
-#     faiss.normalize_L2(all_coffee_embeddings)
-#     index.add(all_coffee_embeddings)
-#     print(f"FAISS index built with {index.ntotal} vectors.")
-#     return all_coffee_embeddings, index
 
 
 def get_recommendations(query, model, index, coffee_df, top_k=5):
@@ -80,14 +34,7 @@ def get_recommendations(query, model, index, coffee_df, top_k=5):
       
       
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Run various prediction functions")
-    parser.add_argument("--goal", type=str, choices=["predict", "create_index_or_embeddings", "create_embeddings"], help="'predict' means you want to get predictions for a query." \
-        "This requires the additional argument 'query' and optional arguments 'query_recs' for saving the query recommendations to a csv and 'num_recommendations'." \
-        "'create_index_or_embedding' is self-explanatory. Set FAISS_INDEX_PATH and EMBEDDINGS_PATH in config.py to save the index and embeddings respectively." \
-        "'create_embeddings' will just create the embeddings and save them to EMBEDDINGS_PATH.")
-    # this should be done in config
-    # parser.add_argument("--encoder_only", default=False, action='store_true', help="Whether to only create the text embeddings without the metadata. Only applies to 'create_index_or_embeddings' and 'create_embeddings' goals.")
-    # parser.add_argument("--untrained", default=False, action='store_true', help="Whether to use an untrained model for creating the index/embeddings.")
+    parser = argparse.ArgumentParser(description="Get predictions for a given query.")
     parser.add_argument("--query", type=str, default=None, help="Query to have recommendations provided for. Type: .txt")
     parser.add_argument("--query_recs", type=str, default=None, help="Save path for recommendations for the given user query")
     parser.add_argument("--num_recommendations", type=int, default=10, help="The number of recommendations you want. Type: positive integer")
@@ -104,11 +51,15 @@ if __name__ == "__main__":
     print("Loading Coffee Data...")
     df = pd.read_csv(PREPROCESSED_DATA_PATH)
     
-    model, vocabs = load_model(
-        VOCABS_PATH,
+    vocabs = load_vocabs(VOCABS_PATH)
+
+    model = load_model(
+        vocabs,
         MODEL_PARAMS["numerical_dim"],
+        MODEL_PARAMS["encoder_only"],
         DEVICE,
         SBERT_MODEL_DIR,
+        TRAINED_MODEL_PATH,
         eval=True
     )
 

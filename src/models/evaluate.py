@@ -7,9 +7,8 @@ import ast
 import re
 import os
 from tqdm import tqdm
-from src.models.utils import CoffeeDataset, to_list
-from src.models.model_utils import load_model
-from src.models.model import DualEncoder
+from src.models.utils import CoffeeDataset
+from src.models.model_utils import load_vocabs, load_model, build_embeddings, build_search_index
 from src.config import (
     QUERIES_PATH, 
     SBERT_MODEL_DIR, 
@@ -17,7 +16,8 @@ from src.config import (
     TRAINED_MODEL_PATH, 
     EMBEDDINGS_PATH, 
     FAISS_INDEX_PATH,
-    VOCABS_PATH
+    VOCABS_PATH,
+    MODEL_PARAMS
 )
 
 
@@ -124,47 +124,8 @@ def evaluate(model, test_df, vocabs, training_data_path, device, precomputed_ind
     print("\nStarting Evaluation...")
 
     test_dataset = CoffeeDataset(test_df, vocabs)
-
-    if EMBEDDINGS_PATH:
-        coffee_embeddings = np.load(EMBEDDINGS_PATH)
-    else:
-        print("Pre-computing coffee embeddings for the test set...")
-        coffee_embeddings = []
-        with torch.no_grad():
-            for i in tqdm(range(len(test_dataset)), desc="Encoding Coffees"):
-                text, numericals, categoricals = test_dataset[i]
-
-                # batch of size 1
-                coffee_batch = {
-                    "text": [text],
-                    "numericals": numericals.unsqueeze(0).to(device),
-                    "categoricals": {
-                        'roast level': categoricals['roast level'].unsqueeze(0).to(device),
-                        'test_method': categoricals['test_method'].unsqueeze(0).to(device),
-                        'price_tier': categoricals['price_tier'].unsqueeze(0).to(device),
-                        'countries_extracted': categoricals['countries_extracted'].to(device),
-                        'countries_extracted_offsets': torch.tensor([0], dtype=torch.long).to(device),
-                        'process': categoricals['process'].to(device),
-                        'process_offsets': torch.tensor([0], dtype=torch.long).to(device),
-                        'varietals': categoricals['varietals'].to(device),
-                        'varietals_offsets': torch.tensor([0], dtype=torch.long).to(device),
-                    }
-                }
-                embedding = model.encode_coffees(coffee_batch)
-                coffee_embeddings.append(embedding.cpu().numpy())
-
-        coffee_embeddings = np.vstack(coffee_embeddings)
-
-    # using FAISS index for speedy searching
-    if precomputed_index is None:
-        print("Building FAISS Index...")
-        index = faiss.IndexFlatIP(768)
-        faiss.normalize_L2(coffee_embeddings)
-        index.add(coffee_embeddings)
-        print(f"FAISS index built with {index.ntotal} vectors.")
-    else:
-        print("Using precomputed FAISS index...")
-        index = faiss.read_index(str(FAISS_INDEX_PATH))
+    
+    index = faiss.read_index(str(FAISS_INDEX_PATH))
 
     # generate the test queries and evaluate
     print("Getting test queries and evaluating recall and ndcg...")
@@ -234,9 +195,11 @@ if __name__ == "__main__":
     df = pd.read_csv(PREPROCESSED_DATA_PATH)
     
     # model, vocabs = load_model_inference(TRAINED_MODEL_PATH, numerical_dim=10, device=DEVICE, model_location=SBERT_MODEL_DIR)
-    model, vocabs = load_model(
-        VOCABS_PATH, 
-        numerical_dim=10, 
+    vocabs = load_vocabs(VOCABS_PATH)
+    model = load_model(
+        vocabs, 
+        numerical_dim=MODEL_PARAMS["numerical_dim"],
+        encoder_only=MODEL_PARAMS["encoder_only"], 
         device=DEVICE, 
         model_arch_path=SBERT_MODEL_DIR, 
         model_weights_path=TRAINED_MODEL_PATH, 

@@ -18,18 +18,22 @@ from src.config import (
 )
 import argparse
 
-def load_model(vocabs_path: str, numerical_dim: int, encoder_only: bool = False, device=torch.device("cpu"), model_arch_path="sentence-transformers/all-mpnet-base-v2", model_weights_path=None, eval=False):
+def load_vocabs(vocabs_path):
+    with open(vocabs_path, "r") as f:
+        vocabs = json.load(f)
+    return vocabs
+
+
+def load_model(vocabs, numerical_dim: int, encoder_only: bool = False, device=torch.device("cpu"), model_arch_path="sentence-transformers/all-mpnet-base-v2", model_weights_path=None, eval=False):
     """
     Loads the DualEncoder model for training or inference.
     If model_weights_path is provided, it loads trained weights, otherwise it returns the untrained base model
     """
-    with open(vocabs_path, "r") as f:
-        vocabs = json.load(f)
 
-    model = DualEncoder(vocabs, numerical_dim, model_arch_path)
+    model = DualEncoder(vocabs, numerical_dim, encoder_only,model_arch_path)
     
     if model_weights_path:
-        checkpoint = torch.load(model_weights_path, map_location=device)
+        checkpoint = torch.load(model_weights_path, map_location=device, weights_only=True)
         model.load_state_dict(checkpoint)
         print(f"Model loaded from {model_weights_path}.")
     else:
@@ -43,11 +47,15 @@ def load_model(vocabs_path: str, numerical_dim: int, encoder_only: bool = False,
         model.train()
         print("Model set to training mode.")
         
-    return model, vocabs
+    return model
 
 
 def build_embeddings(model, coffee_df, vocabs, device, enc_only=False):
     """Encodes all coffees and saves the raw embeddings to a numpy file."""
+    if enc_only:
+        print("Setting inference mode to encoder only...")
+        model.encoder_only = True
+
     print("Building embeddings for all coffees...")
     print(f"Using encoder only: {enc_only}")
     full_dataset = CoffeeDataset(coffee_df, vocabs)
@@ -72,7 +80,7 @@ def build_embeddings(model, coffee_df, vocabs, device, enc_only=False):
                     'varietals_offsets': torch.tensor([0], dtype=torch.long).to(device),
                 }
             }
-            embedding = model.encode_coffees(coffee_batch, enc_only=enc_only)
+            embedding = model.encode_coffees(coffee_batch)
             all_coffee_embeddings.append(embedding.cpu().numpy())
             
     all_coffee_embeddings = np.vstack(all_coffee_embeddings)
@@ -100,9 +108,12 @@ if __name__ == "__main__":
     DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {DEVICE}")
 
-    model, vocabs = load_model(
-        vocabs_path=VOCABS_PATH,
-        numerical_dim=10,  # Set to 0 since we're only encoding coffees
+    vocabs = load_vocabs(VOCABS_PATH)
+
+    model = load_model(
+        vocabs=vocabs,
+        numerical_dim=MODEL_PARAMS["numerical_dim"],  # Set to 0 since we're only encoding coffees
+        encoder_only=MODEL_PARAMS["encoder_only"],
         device=DEVICE,
         model_arch_path=SBERT_MODEL_DIR,
         model_weights_path=TRAINED_MODEL_PATH,

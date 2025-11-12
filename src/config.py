@@ -22,9 +22,9 @@ RAW_DATA_PATH = RAW_DIR / "full_data_scrape.csv"
 PREPROCESSED_DATA_PATH = PROCESSED_DIR / "preprocessed_data.csv"
 TRAIN_DATA_PATH = PROCESSED_DIR / "train_data_8_11.csv"
 TEST_DATA_PATH = PROCESSED_DIR / "test_data_8_11.csv"
-FAISS_INDEX_PATH = FAISS_DIR / "encoder_only_trained_faiss_index.bin"#"faiss_index.bin"
-EMBEDDINGS_PATH = EMBEDDINGS_DIR / "encoder_only_trained_embeddings.npy"
-TRAINED_MODEL_PATH = MODEL_WEIGHTS_DIR / "best_model_weights_only.pth" #"8-11" / "coffee_model_epoch_11_semi_hard_3.pth"
+FAISS_INDEX_PATH = FAISS_DIR / "test.bin"#"faiss_index.bin"
+EMBEDDINGS_PATH = EMBEDDINGS_DIR / "test.npy"
+TRAINED_MODEL_PATH = MODEL_WEIGHTS_DIR / "best_model_weights_only.pth" # switch to none for untrained model #"8-11" / "coffee_model_epoch_11_semi_hard_3.pth"
 QUERIES_PATH = DATA_DIR / "outputs" / "llm-queries" / "synthetic_queries_np_4_1_nano.jsonl"
 VOCABS_PATH = MODELS_DIR / "vocabs" / "best_model_vocabs.json"
 MODEL_SAVE_DIR = MODEL_WEIGHTS_DIR / f"{today.month}-{today.day}"
@@ -34,15 +34,18 @@ MODEL_SAVE_PATH = MODEL_SAVE_DIR / "coffee_model_epoch_"
 # MODEL HYPERPARAMS
 TRAIN_PARAMS = {
     "batch_size": 32,
-    "numerical_dim": 10,
     "transformer_lr": 1e-6,
     "head_lr": 1e-6,
     "num_epochs": 10,
     "semi_hard_mining_start_epoch": 3,
-    "margin": 0.2
+    "margin": 0.2,
 }
 
-EMBEDDING_DIM = 768
+MODEL_PARAMS = {
+    "numerical_dim": 10,
+    "embedding_dim": 768,
+    "encoder_only": False,
+}
 
 # API KEYS
 # OPENAI_KEY = os.getenv("OPENAI_API_KEY")
