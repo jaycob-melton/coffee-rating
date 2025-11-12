@@ -71,9 +71,10 @@ def get_recommendations(query, model, index, coffee_df, top_k=5):
       
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run various prediction functions")
-    parser.add_argument("--goal", type=str, choices=["predict", "create_index_or_embeddings"], help="'predict' means you want to get predictions for a query." \
+    parser.add_argument("--goal", type=str, choices=["predict", "create_index_or_embeddings", "create_embeddings"], help="'predict' means you want to get predictions for a query." \
         "This requires the additional argument 'query' and optional arguments 'query_recs' for saving the query recommendations to a csv and 'num_recommendations'." \
-        "'create_index_or_embedding' is self-explanatory. Set FAISS_INDEX_PATH and EMBEDDINGS_PATH in config.py to save the index and embeddings respectively.")
+        "'create_index_or_embedding' is self-explanatory. Set FAISS_INDEX_PATH and EMBEDDINGS_PATH in config.py to save the index and embeddings respectively." \
+        "'create_embeddings' will just create the embeddings and save them to EMBEDDINGS_PATH.")
     parser.add_argument("--query", type=str, default=None, help="Query to have recommendations provided for. Type: .txt")
     parser.add_argument("--query_recs", type=str, default=None, help="Save path for recommendations for the given user query")
     parser.add_argument("--num_recommendations", type=int, default=10, help="The number of recommendations you want. Type: positive integer")
@@ -86,8 +87,10 @@ if __name__ == "__main__":
     
     if args.goal == "predict":
         assert(QUERY_PATH)
-    else:
+    elif args.goal == "create_index_or_embeddings":
         assert(FAISS_INDEX_PATH or EMBEDDINGS_PATH)
+    else:
+        assert(EMBEDDINGS_PATH)
 
     
     DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -123,14 +126,20 @@ if __name__ == "__main__":
         if QUERY_REC_PATH:
             recommendations[display_cols].to_csv(QUERY_REC_PATH)
 
-    else:
+    elif args.goal == "create_index_or_embeddings":
         # build embeddings/search_index
         all_embeddings, search_index = build_search_index(model, df, vocabs, DEVICE)
         # save requested files
         if FAISS_INDEX_PATH:
-            faiss.write_index(search_index, FAISS_INDEX_PATH)
+            faiss.write_index(search_index, str(FAISS_INDEX_PATH))
             print(f"Saved FAISS index to: {FAISS_INDEX_PATH}")
         if EMBEDDINGS_PATH:
             np.save(EMBEDDINGS_PATH, all_embeddings) 
             print(f"Saved raw embeddings to: {EMBEDDINGS_PATH}")
+    else: # generate just embeddings
+        all_embeddings = build_embeddings(model, df, vocabs, DEVICE)
+        if EMBEDDINGS_PATH:
+            np.save(EMBEDDINGS_PATH, all_embeddings) 
+            print(f"Saved raw embeddings to: {EMBEDDINGS_PATH}")
+        
     
