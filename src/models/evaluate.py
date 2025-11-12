@@ -22,13 +22,13 @@ from src.config import (
 
 
 ATTRIBUTE_WEIGHTS = {
-    'origin': 1,
-    'process': 1,
-    'varietal': 1,
-    'flavor': 1,
+    'origin': 3,
+    'process': 3,
+    'varietal': 2,
+    'flavor': 2,
     'notes': 1,
-    'roast': 1,
-    'test_method': 1
+    'roast': 2,
+    'test_method': 3
 }
 
 def calculate_relevance(query: str, coffee_row: pd.Series) -> int:
@@ -243,3 +243,7 @@ if __name__ == "__main__":
         eval=True
     )
     evaluate(model, df, vocabs, QUERIES_PATH, DEVICE, FAISS_INDEX_PATH)
+
+    if DEVICE.type == "cuda":
+        del model
+        torch.cuda.empty_cache()

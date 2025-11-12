@@ -11,7 +11,9 @@ from src.config import (
     TRAINED_MODEL_PATH, 
     SBERT_MODEL_DIR, 
     FAISS_INDEX_PATH, 
-    EMBEDDINGS_PATH
+    EMBEDDINGS_PATH,
+    VOCABS_PATH,    
+    MODEL_PARAMS
 )
 import time
 import argparse
@@ -92,20 +94,9 @@ if __name__ == "__main__":
     
     args = parser.parse_args()
     
-    # ENC_ONLY = args.encoder_only
-    UNTRAINED = args.untrained
-    QUERY_PATH = args.query
+    QUERY = args.query
     QUERY_REC_PATH = args.query_recs
     TOP_K = args.num_recommendations
-    
-    
-    if args.goal == "predict":
-        assert(QUERY_PATH)
-    elif args.goal == "create_index_or_embeddings":
-        assert(FAISS_INDEX_PATH or EMBEDDINGS_PATH)
-    else:
-        assert(EMBEDDINGS_PATH)
-
     
     DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {DEVICE}")
@@ -113,50 +104,39 @@ if __name__ == "__main__":
     print("Loading Coffee Data...")
     df = pd.read_csv(PREPROCESSED_DATA_PATH)
     
-    
     model, vocabs = load_model(
-        TRAINED_MODEL_PATH, 
-        numerical_dim=10, 
-        device=DEVICE,           
-        model_arch_path=SBERT_MODEL_DIR,
-        model_weights_path=None if UNTRAINED else TRAINED_MODEL_PATH,
+        VOCABS_PATH,
+        MODEL_PARAMS["numerical_dim"],
+        DEVICE,
+        SBERT_MODEL_DIR,
         eval=True
     )
-    
-    if args.goal == "predict":
-        with open(QUERY_PATH, "r") as f:
-            query = f.read().strip()
-        # load in the given faiss index
-        index = faiss.read_index(str(FAISS_INDEX_PATH))
-        
-        # acquire the top 10 recommendations and time it
-        start_time = time.time()
-        recommendations = get_recommendations(query, model, index, df, top_k=TOP_K)
-        end_time = time.time()
-        
-        duration = end_time - start_time
-        print(f"Recommendations took {duration:.2f} seconds to run serve.")
-        
-        # dump recommendations to csv if requested
-        display_cols = ['url', 'company', 'coffee name', 'roast level', 'process', 'test_method', 'countries_extracted', "flavor_profile", "blind assessment", 'bottom line']
-        print(recommendations[display_cols])
-        if QUERY_REC_PATH:
-            recommendations[display_cols].to_csv(QUERY_REC_PATH)
 
-    elif args.goal == "create_index_or_embeddings":
-        # build embeddings/search_index
-        all_embeddings, search_index = build_search_index(model, df, vocabs, DEVICE, enc_only=ENC_ONLY)
-        # save requested files
-        if FAISS_INDEX_PATH:
-            faiss.write_index(search_index, str(FAISS_INDEX_PATH))
-            print(f"Saved FAISS index to: {FAISS_INDEX_PATH}")
-        if EMBEDDINGS_PATH:
-            np.save(EMBEDDINGS_PATH, all_embeddings) 
-            print(f"Saved raw embeddings to: {EMBEDDINGS_PATH}")
-    else: # generate just embeddings
-        all_embeddings = build_embeddings(model, df, vocabs, DEVICE, enc_only=ENC_ONLY)
-        if EMBEDDINGS_PATH:
-            np.save(EMBEDDINGS_PATH, all_embeddings) 
-            print(f"Saved raw embeddings to: {EMBEDDINGS_PATH}")
+    if ".txt" in QUERY:
+        with open(QUERY, "r") as f:
+            query = f.read().strip()
+    else:
+        query = QUERY.strip()
+    # load in the given faiss index
+    index = faiss.read_index(str(FAISS_INDEX_PATH))
+    
+    # acquire the top 10 recommendations and time it
+    start_time = time.time()
+    recommendations = get_recommendations(query, model, index, df, top_k=TOP_K)
+    end_time = time.time()
+    
+    duration = end_time - start_time
+    print(f"Recommendations took {duration:.2f} seconds to run serve.")
+    
+    # dump recommendations to csv if requested
+    display_cols = ['url', 'company', 'coffee name', 'roast level', 'process', 'test_method', 'countries_extracted', "flavor_profile", "blind assessment", 'bottom line']
+    print(recommendations[display_cols])
+    if QUERY_REC_PATH:
+        recommendations[display_cols].to_csv(QUERY_REC_PATH)
+
+    if DEVICE.type == "cuda":
+        del model
+        torch.cuda.empty_cache()
+
         
     

@@ -1,13 +1,24 @@
 import json
+from turtle import pd
 import torch
+import pandas as pd
 import numpy as np
 import faiss
 from tqdm import tqdm
 from src.models.model import DualEncoder
 from src.models.utils import CoffeeDataset
-import config
+from src.config import (
+    VOCABS_PATH,
+    PREPROCESSED_DATA_PATH,
+    TRAINED_MODEL_PATH,
+    SBERT_MODEL_DIR,
+    EMBEDDINGS_PATH,
+    FAISS_INDEX_PATH,
+    MODEL_PARAMS
+)
+import argparse
 
-def load_model(vocabs_path: str, numerical_dim: int, device, model_arch_path="sentence-transformers/all-mpnet-base-v2", model_weights_path=None, eval=False):
+def load_model(vocabs_path: str, numerical_dim: int, encoder_only: bool = False, device=torch.device("cpu"), model_arch_path="sentence-transformers/all-mpnet-base-v2", model_weights_path=None, eval=False):
     """
     Loads the DualEncoder model for training or inference.
     If model_weights_path is provided, it loads trained weights, otherwise it returns the untrained base model
@@ -72,8 +83,58 @@ def build_search_index(embeddings):
     """Encodes all coffees and builds a searchable FAISS index."""
     print("Building search index for all coffees...")
     
-    index = faiss.IndexFlatIP(config.EMBEDDING_DIM)
+    index = faiss.IndexFlatIP(MODEL_PARAMS["embedding_dim"])
     faiss.normalize_L2(embeddings)
     index.add(embeddings)
     print(f"FAISS index built with {index.ntotal} vectors.")
     return index
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Flag for building embeddings or search index")
+    parser.add_argument("--build_embeddings", action="store_true", help="Flag to build embeddings for all coffees. Saves to a numpy file in config.EMBEDDINGS_PATH")
+    parser.add_argument("--build_index", action="store_true", help="Flag to build a FAISS search index. Saves to a file in config.FAISS_INDEX_PATH. If --build_embeddings is not set, it will load embeddings from config.EMBEDDINGS_PATH")
+    
+    args = parser.parse_args()
+
+    DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"Using device: {DEVICE}")
+
+    model, vocabs = load_model(
+        vocabs_path=VOCABS_PATH,
+        numerical_dim=10,  # Set to 0 since we're only encoding coffees
+        device=DEVICE,
+        model_arch_path=SBERT_MODEL_DIR,
+        model_weights_path=TRAINED_MODEL_PATH,
+        eval=True
+    )
+
+    print("Loading coffee data...")
+    df = pd.read_csv(PREPROCESSED_DATA_PATH)
+    embeddings = None
+    if args.build_embeddings:
+        embeddings = build_embeddings(model, df, vocabs, DEVICE, enc_only=MODEL_PARAMS["encoder_only"])
+        try:
+            np.save(EMBEDDINGS_PATH, embeddings)
+            print(f"Embeddings saved to {EMBEDDINGS_PATH}")
+        except Exception as e:
+            print(f"Error saving embeddings: {e}")
+    
+    if args.build_index:
+        if embeddings is None:
+            print(f"Loading embeddings from {EMBEDDINGS_PATH}...")
+            embeddings = np.load(EMBEDDINGS_PATH)
+        
+        index = build_search_index(embeddings)
+        try:
+            faiss.write_index(index, str(FAISS_INDEX_PATH))
+            print(f"FAISS index saved to {FAISS_INDEX_PATH}")
+        except Exception as e:
+            print(f"Error saving FAISS index: {e}")
+    
+    if DEVICE.type == "cuda":
+        del model
+        torch.cuda.empty_cache()
+
+
+
