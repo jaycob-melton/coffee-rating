@@ -111,3 +111,48 @@ class TripleTrainingDataset(Dataset):
     
     def __getitem__(self, idx):
         return self.queries[idx]
+    
+
+def collate(batch, coffee_dataset: CoffeeDataset):
+    """
+    Collate function to prepare a batch for training
+    """
+    queries = [item["query"] for item in batch]
+    positive_indices = [item["positive_idx"] for item in batch]
+
+    positive_coffee_batch = {
+        'text': [],
+        'numericals': [],
+        'categoricals': {
+            'roast level': [], 'test_method': [], 'price_tier': [],
+            'countries_extracted': [], 'process': [], 'varietals': [],
+            'countries_extracted_offsets': [0], 'process_offsets': [0], 'varietals_offsets': [0]
+        }
+    }
+    # store all data about postive coffees
+    for idx in positive_indices:
+        text, numericals, categoricals = coffee_dataset[idx]
+        positive_coffee_batch["text"].append(text)
+        positive_coffee_batch["numericals"].append(numericals)
+        for col, val in categoricals.items():
+            if val.dim() == 0:
+                positive_coffee_batch["categoricals"][col].append(val)
+            else:
+                positive_coffee_batch["categoricals"][col].append(val)
+                offset_key = f"{col}_offsets"
+                # need to store offset since these cats take variable length
+                offsets = positive_coffee_batch["categoricals"][offset_key]
+                offsets.append(offsets[-1] + len(val))
+    
+    # convert everything to tensors for models
+    positive_coffee_batch["numericals"] = torch.stack(positive_coffee_batch["numericals"])
+    for col, val in positive_coffee_batch["categoricals"].items():
+        if "offsets" not in col and len(val) > 0:
+            if val[0].dim() == 0:
+                positive_coffee_batch["categoricals"][col] = torch.stack(val)
+            else:
+                positive_coffee_batch["categoricals"][col] = torch.cat(val)
+        elif "offsets" in col:
+            positive_coffee_batch["categoricals"][col] = torch.tensor(val[:-1], dtype=torch.long)
+
+    return queries, positive_indices, positive_coffee_batch

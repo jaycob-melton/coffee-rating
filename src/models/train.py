@@ -7,55 +7,19 @@ from torch.optim import AdamW
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from sklearn.model_selection import train_test_split
-from src.models.utils import CoffeeDataset, TripleTrainingDataset, build_all_vocabs
+from src.models.utils import CoffeeDataset, TripleTrainingDataset, collate
 from src.models.model import DualEncoder
+from src.config import (
+    TRAIN_DATA_PATH,
+    VOCABS_PATH,
+    QUERIES_PATH,
+    SBERT_MODEL_DIR,
+    TRAINED_MODEL_PATH,
+    MODEL_SAVE_PATH,
+    TRAIN_PARAMS
+)
 
 torch.manual_seed(189)  # for reproducibility
-
-def collate(batch, coffee_dataset: CoffeeDataset):
-    """
-    Collate function to prepare a batch for training
-    """
-    queries = [item["query"] for item in batch]
-    positive_indices = [item["positive_idx"] for item in batch]
-
-    positive_coffee_batch = {
-        'text': [],
-        'numericals': [],
-        'categoricals': {
-            'roast level': [], 'test_method': [], 'price_tier': [],
-            'countries_extracted': [], 'process': [], 'varietals': [],
-            'countries_extracted_offsets': [0], 'process_offsets': [0], 'varietals_offsets': [0]
-        }
-    }
-    # store all data about postive coffees
-    for idx in positive_indices:
-        text, numericals, categoricals = coffee_dataset[idx]
-        positive_coffee_batch["text"].append(text)
-        positive_coffee_batch["numericals"].append(numericals)
-        for col, val in categoricals.items():
-            if val.dim() == 0:
-                positive_coffee_batch["categoricals"][col].append(val)
-            else:
-                positive_coffee_batch["categoricals"][col].append(val)
-                offset_key = f"{col}_offsets"
-                # need to store offset since these cats take variable length
-                offsets = positive_coffee_batch["categoricals"][offset_key]
-                offsets.append(offsets[-1] + len(val))
-    
-    # convert everything to tensors for models
-    positive_coffee_batch["numericals"] = torch.stack(positive_coffee_batch["numericals"])
-    for col, val in positive_coffee_batch["categoricals"].items():
-        if "offsets" not in col and len(val) > 0:
-            if val[0].dim() == 0:
-                positive_coffee_batch["categoricals"][col] = torch.stack(val)
-            else:
-                positive_coffee_batch["categoricals"][col] = torch.cat(val)
-        elif "offsets" in col:
-            positive_coffee_batch["categoricals"][col] = torch.tensor(val[:-1], dtype=torch.long)
-
-    return queries, positive_indices, positive_coffee_batch
-
 
 def load_model_train(model_path: str, numerical_dim: int, device):
     """
@@ -88,7 +52,7 @@ def train(config):
     full_coffee_dataset = CoffeeDataset(df, vocabs)
 
     # provides thje (query, positive_idx) pairs for training
-    train_dataset = TripleTrainingDataset(config["training_data_path"], df)
+    train_dataset = TripleTrainingDataset(config["queries_path"], df)
 
 
     train_loader = DataLoader(
@@ -99,10 +63,18 @@ def train(config):
     )
 
     # model, loss, optimizer
-    if config["model_path"]:
-        model, vocabs = load_model_train(config["model_path"], numerical_dim=len(full_coffee_dataset.numerical_cols), device=device)
-    else:
-        model = DualEncoder(vocabs, numerical_dim=len(full_coffee_dataset.numerical_cols)).to(device)
+    # if config["model_path"]:
+    #     model, vocabs = load_model_train(config["model_path"], numerical_dim=len(full_coffee_dataset.numerical_cols), device=device)
+    # else:
+    #     model = DualEncoder(vocabs, numerical_dim=len(full_coffee_dataset.numerical_cols)).to(device)
+
+    model, _ = build_model(
+        vocabs_path=config["vocabs"],
+        numerical_dim=len(full_coffee_dataset.numerical_cols),
+        device=device,
+        model_arch_path=config["enc_model_path"],
+        model_weights_path=config["model_path"],
+    )
 
     loss_fn = nn.TripletMarginLoss(margin=config["margin"])
 
@@ -219,50 +191,55 @@ def train(config):
         if use_semi_hard_mining:
             print(f"Number of Semi-hard Negatives Used: {num_semi_hard}")
 
-        checkpoint = {
-            "model_state_dict": model.state_dict(),
-            "vocabs": vocabs,
-            "loss": loss_info["loss"],
-        }
-        torch.save(checkpoint, f"{config['save_path']}_{epoch+1}.pth")
+        # checkpoint = {
+        #     "model_state_dict": model.state_dict(),
+        #     "vocabs": vocabs,
+        #     "loss": loss_info["loss"],
+        # }
+        torch.save(model.state_dict(), f"{config['save_path']}{epoch+1}.pth")
     
     return loss_info
 
 
 if __name__ == "__main__":
-    PREPROCESSED_PATH = "data/processed/preprocessed_data.csv"
-    TRAINING_DATA_PATH = "data/processed/training_data.jsonl"
+    # PREPROCESSED_PATH = "data/processed/preprocessed_data.csv"
+    # TRAINING_DATA_PATH = "data/processed/training_data.jsonl"
     # MODEL_PATH = "coffee_model_simpleadam_epoch_10.pth"
 
     DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    print("Loading Coffee Data...")
-    df = pd.read_csv(PREPROCESSED_PATH)
-    df["combined_text"] = df["blind assessment"].fillna("") + " " + df["bottom line"].fillna("")
+    # print("Loading Coffee Data...")
+    # df = pd.read_csv(PREPROCESSED_PATH)
+    # df["combined_text"] = df["blind assessment"].fillna("") + " " + df["bottom line"].fillna("")
     
-    print("Creating 80/20 train-test split...")
-    train_df, test_df = train_test_split(df, test_size=0.2, random_state=189)
-    train_df = train_df.reset_index(drop=True)
-    test_df = test_df.reset_index(drop=True)
+    # print("Creating 80/20 train-test split...")
+    # train_df, test_df = train_test_split(df, test_size=0.2, random_state=189)
+    # train_df = train_df.reset_index(drop=True)
+    # test_df = test_df.reset_index(drop=True)
     
-    train_df.to_csv("data/processed/train_data_8_11.csv", index=False)
-    test_df.to_csv("data/processed/test_data_8_11.csv", index=False)
+    # train_df.to_csv("data/processed/train_data_8_11.csv", index=False)
+    # test_df.to_csv("data/processed/test_data_8_11.csv", index=False)
 
-    vocabs = build_all_vocabs(train_df)
+    # vocabs = build_all_vocabs(train_df)
 
 
     config = {
-        "preprocessed_data": train_df,
-        "vocabs": vocabs,
-        "training_data_path": TRAINING_DATA_PATH,
-        "batch_size": 32,
-        "transformer_lr": 1e-6,
-        "head_lr": 1e-6,
-        "epochs": 10,
-        "margin": 0.2,
-        "semi_hard_mining_start_epoch": -1,
-        "model_path": "data/outputs/model-weights/8-11/coffee_model_epoch_11_semi_hard_3.pth",
-        "save_path": "data/outputs/model-weights/8-11/coffee_model_epoch_11_semi_hard_epoch_3",
+        # Data paths
+        "preprocessed_data": TRAIN_DATA_PATH,
+        "query_path": QUERIES_PATH,
+        "vocabs": VOCABS_PATH,
+
+        # Model paths
+        "enc_model_path": SBERT_MODEL_DIR,
+        "model_path": TRAINED_MODEL_PATH,
+        "save_path": MODEL_SAVE_PATH,
+
+        "batch_size": TRAIN_PARAMS["batch_size"],
+        "transformer_lr": TRAIN_PARAMS["transformer_lr"],
+        "head_lr": TRAIN_PARAMS["head_lr"],
+        "epochs": TRAIN_PARAMS["num_epochs"],
+        "margin": TRAIN_PARAMS["margin"],
+        "semi_hard_mining_start_epoch": TRAIN_PARAMS["semi_hard_mining_start_epoch"],
     }
 
     loss_info = train(config)
