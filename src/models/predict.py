@@ -9,10 +9,9 @@ from src.config import PREPROCESSED_DATA_PATH, TRAINED_MODEL_PATH, SBERT_MODEL_D
 import time
 import argparse
 
-def build_search_index(model, coffee_df, vocabs, device, output_path="faiss_index.bin"):
-    """Encodes all coffees and builds a searchable FAISS index."""
-    print("Building search index for all coffees...")
-    # Use the full dataset for the index
+def build_embeddings(model, coffee_df, vocabs, device):
+    """Encodes all coffees and saves the raw embeddings to a numpy file."""
+    print("Building embeddings for all coffees...")
     full_dataset = CoffeeDataset(coffee_df, vocabs)
     
     all_coffee_embeddings = []
@@ -20,7 +19,6 @@ def build_search_index(model, coffee_df, vocabs, device, output_path="faiss_inde
         for i in tqdm(range(len(full_dataset)), desc="Encoding all coffees"):
             text, numericals, categoricals = full_dataset[i]
             
-            # Manually create a batch of size 1
             coffee_batch = {
                 'text': [text],
                 'numericals': numericals.unsqueeze(0).to(device),
@@ -40,12 +38,19 @@ def build_search_index(model, coffee_df, vocabs, device, output_path="faiss_inde
             all_coffee_embeddings.append(embedding.cpu().numpy())
             
     all_coffee_embeddings = np.vstack(all_coffee_embeddings)
+    return all_coffee_embeddings
+
+
+def build_search_index(model, coffee_df, vocabs, device):
+    """Encodes all coffees and builds a searchable FAISS index."""
+    all_coffee_embeddings = build_embeddings(model, coffee_df, vocabs, device)
+
+    print("Building search index for all coffees...")
     
     index = faiss.IndexFlatIP(768)
     faiss.normalize_L2(all_coffee_embeddings)
     index.add(all_coffee_embeddings)
     print(f"FAISS index built with {index.ntotal} vectors.")
-    faiss.write_index(index, output_path)
     return all_coffee_embeddings, index
 
 
@@ -89,12 +94,18 @@ if __name__ == "__main__":
         assert(INDEX_OUTPUT_PATH or EMBEDDINGS_OUTPUT_PATH)
     
     DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"Using device: {DEVICE}")
 
     print("Loading Coffee Data...")
     df = pd.read_csv(PREPROCESSED_DATA_PATH)
     # df["combined_text"] = df["blind assessment"].fillna("") + " " + df["bottom line"].fillna("")
     
-    model, vocabs = load_model_inference(TRAINED_MODEL_PATH, numerical_dim=10, device=DEVICE, model_location=SBERT_MODEL_DIR)
+    model, vocabs = load_model_inference(
+        TRAINED_MODEL_PATH, 
+        numerical_dim=10, 
+        device=DEVICE,           
+        model_location=SBERT_MODEL_DIR
+    )
     
     if args.goal == "predict":
         with open(QUERY_PATH, "r") as f:
