@@ -24,20 +24,31 @@ def load_vocabs(vocabs_path):
     return vocabs
 
 
-def load_model(vocabs, numerical_dim: int, encoder_only: bool = False, device=torch.device("cpu"), model_arch_path="sentence-transformers/all-mpnet-base-v2", model_weights_path=None, eval=False):
+def load_model(device, model_path=None, eval=False):
     """
     Loads the DualEncoder model for training or inference.
     If model_weights_path is provided, it loads trained weights, otherwise it returns the untrained base model
     """
-
-    model = DualEncoder(vocabs, numerical_dim, encoder_only,model_arch_path)
+    vocabs = load_vocabs(VOCABS_PATH)
+    model = DualEncoder(
+        vocabs=vocabs, 
+        numerical_dim=MODEL_PARAMS["numerical_dim"],
+        embedding_dim=MODEL_PARAMS["embedding_dim"], 
+        fc_dropout=MODEL_PARAMS["fc_dropout"], 
+        dropout=MODEL_PARAMS["dropout"], 
+        encoder_only=MODEL_PARAMS["encoder_only"], 
+        text_model_name=SBERT_MODEL_DIR
+    )
     
-    if model_weights_path:
-        checkpoint = torch.load(model_weights_path, map_location=device, weights_only=True)
+    if model_path:
+        checkpoint = torch.load(model_path, map_location=device, weights_only=True)
         model.load_state_dict(checkpoint)
-        print(f"Model loaded from {model_weights_path}.")
+        print(f"Model loaded from {model_path}.")
+    elif TRAINED_MODEL_PATH:
+        checkpoint = torch.load(TRAINED_MODEL_PATH, map_location=device, weights_only=True)
+        model.load_state_dict(checkpoint)
     else:
-        print(f"No model weights provided. Loaded untrained model with architecture {model_arch_path}.")
+        print(f"No model weights provided. Loaded untrained model with architecture {SBERT_MODEL_DIR}.")
     
     model.to(device)
     if eval:
@@ -110,15 +121,7 @@ if __name__ == "__main__":
 
     vocabs = load_vocabs(VOCABS_PATH)
 
-    model = load_model(
-        vocabs=vocabs,
-        numerical_dim=MODEL_PARAMS["numerical_dim"],  # Set to 0 since we're only encoding coffees
-        encoder_only=MODEL_PARAMS["encoder_only"],
-        device=DEVICE,
-        model_arch_path=SBERT_MODEL_DIR,
-        model_weights_path=TRAINED_MODEL_PATH,
-        eval=True
-    )
+    model = load_model(DEVICE, eval=True)
 
     print("Loading coffee data...")
     df = pd.read_csv(PREPROCESSED_DATA_PATH)

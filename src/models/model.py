@@ -3,7 +3,7 @@ import torch.nn as nn
 from transformers import AutoTokenizer, AutoModel
 
 class MetadataEncoder(nn.Module):
-    def __init__(self, vocabs, numerical_dim, embedding_dim=16):
+    def __init__(self, vocabs, numerical_dim, embedding_dim=16, fc_dropout=0.1, dropout=0.2):
         super().__init__()
         self.vocabs = vocabs
         emb_rows = lambda v: max(v.values()) + 1
@@ -21,11 +21,13 @@ class MetadataEncoder(nn.Module):
         self.fc = nn.Sequential(
             nn.Linear(numerical_dim, 32),
             nn.ReLU(),
+            nn.Dropout(fc_dropout),
             nn.Linear(32, embedding_dim)
         )
 
         total_embed_dim = embedding_dim * 7
         self.output_dim = total_embed_dim
+        self.dropout = nn.Dropout(dropout)
 
     def forward(self, num_features, cat_features):
         roast_emb = self.roast_lvl_embed(cat_features["roast level"])
@@ -50,7 +52,7 @@ class MetadataEncoder(nn.Module):
 
 class DualEncoder(nn.Module):
     def __init__(self, vocabs, numerical_dim, encoder_only=False,text_model_name="sentence-transformers/all-mpnet-base-v2",
-                 embedding_dim=768, max_length=256):
+                 embedding_dim=768, max_length=256, fc_dropout=0.1, dropout=0.2):
         super().__init__()
         # Hugging Face model + tokenizer (trainable)
         self.encoder_only = encoder_only
@@ -62,7 +64,7 @@ class DualEncoder(nn.Module):
 
         if not encoder_only:
             self.numerical_dim = numerical_dim
-            self.metadata_encoder = MetadataEncoder(vocabs, numerical_dim)
+            self.metadata_encoder = MetadataEncoder(vocabs, numerical_dim, fc_dropout=fc_dropout, dropout=dropout)
             self.fusion_layer = nn.Linear(self.text_hidden + self.metadata_encoder.output_dim, embedding_dim)
             print("DualEncoder initialized in 'full' mode (with metadata).")
         else:

@@ -53,15 +53,7 @@ if __name__ == "__main__":
     
     vocabs = load_vocabs(VOCABS_PATH)
 
-    model = load_model(
-        vocabs,
-        MODEL_PARAMS["numerical_dim"],
-        MODEL_PARAMS["encoder_only"],
-        DEVICE,
-        SBERT_MODEL_DIR,
-        TRAINED_MODEL_PATH,
-        eval=True
-    )
+    model = load_model(DEVICE, eval=True)
 
     if ".txt" in QUERY:
         with open(QUERY, "r") as f:
