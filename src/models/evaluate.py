@@ -123,7 +123,7 @@ def evaluate(model, test_df, vocabs, training_data_path, device, precomputed_ind
     """
     print("\nStarting Evaluation...")
 
-    test_dataset = CoffeeDataset(test_df, vocabs)
+    # test_dataset = CoffeeDataset(test_df, vocabs)
     
     index = faiss.read_index(str(FAISS_INDEX_PATH))
 
@@ -199,6 +199,7 @@ if __name__ == "__main__":
     model = load_model(
         vocabs, 
         numerical_dim=MODEL_PARAMS["numerical_dim"],
+        embedding_dim=MODEL_PARAMS["embedding_dim"],
         encoder_only=MODEL_PARAMS["encoder_only"], 
         device=DEVICE, 
         model_arch_path=SBERT_MODEL_DIR, 

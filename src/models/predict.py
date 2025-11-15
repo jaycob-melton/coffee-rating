@@ -54,12 +54,13 @@ if __name__ == "__main__":
     vocabs = load_vocabs(VOCABS_PATH)
 
     model = load_model(
-        vocabs,
-        MODEL_PARAMS["numerical_dim"],
-        MODEL_PARAMS["encoder_only"],
-        DEVICE,
-        SBERT_MODEL_DIR,
-        TRAINED_MODEL_PATH,
+        vocabs=vocabs,
+        numerical_dim=MODEL_PARAMS["numerical_dim"],
+        embedding_dim=MODEL_PARAMS["embedding_dim"],
+        encoder_only=MODEL_PARAMS["encoder_only"],
+        device=DEVICE,
+        model_arch_path=SBERT_MODEL_DIR,
+        model_weights_path=TRAINED_MODEL_PATH,
         eval=True
     )
 
@@ -80,7 +81,8 @@ if __name__ == "__main__":
     print(f"Recommendations took {duration:.2f} seconds to run serve.")
     
     # dump recommendations to csv if requested
-    display_cols = ['url', 'company', 'coffee name', 'roast level', 'process', 'test_method', 'countries_extracted', "flavor_profile", "blind assessment", 'bottom line']
+    display_cols = ['url', 'coffee name', 'roast level', 'process', 'test_method', 'countries_extracted', "flavor_profile", "blind assessment", 'bottom line']
+    pd.set_option('display.max_columns', None)
     print(recommendations[display_cols])
     if QUERY_REC_PATH:
         recommendations[display_cols].to_csv(QUERY_REC_PATH)

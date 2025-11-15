@@ -49,7 +49,7 @@ class MetadataEncoder(nn.Module):
 
 
 class DualEncoder(nn.Module):
-    def __init__(self, vocabs, numerical_dim, encoder_only=False,text_model_name="sentence-transformers/all-mpnet-base-v2",
+    def __init__(self, vocabs, numerical_dim, encoder_only=False, text_model_name="sentence-transformers/all-mpnet-base-v2",
                  embedding_dim=768, max_length=256):
         super().__init__()
         # Hugging Face model + tokenizer (trainable)

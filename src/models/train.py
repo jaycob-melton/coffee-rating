@@ -12,6 +12,7 @@ from src.models.utils import CoffeeDataset, TripleTrainingDataset, collate
 from src.models.model_utils import load_vocabs, load_model
 from src.config import (
     TRAIN_DATA_PATH,
+    PREPROCESSED_DATA_PATH,
     VOCABS_PATH,
     QUERIES_PATH,
     SBERT_MODEL_DIR,
@@ -28,7 +29,7 @@ def train(device):
     print(f"Using device: {device}")
 
     # Load data
-    df = pd.read_csv(TRAIN_DATA_PATH)
+    df = pd.read_csv(PREPROCESSED_DATA_PATH)
     vocabs = load_vocabs(VOCABS_PATH)
 
     # used by collate to look up coffee data by index
@@ -48,6 +49,7 @@ def train(device):
     model = load_model(
         vocabs=vocabs,
         numerical_dim=len(full_coffee_dataset.numerical_cols),
+        embedding_dim=MODEL_PARAMS["embedding_dim"],
         encoder_only=MODEL_PARAMS["encoder_only"],
         device=device,
         model_arch_path=SBERT_MODEL_DIR,

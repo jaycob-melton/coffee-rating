@@ -24,13 +24,19 @@ def load_vocabs(vocabs_path):
     return vocabs
 
 
-def load_model(vocabs, numerical_dim: int, encoder_only: bool = False, device=torch.device("cpu"), model_arch_path="sentence-transformers/all-mpnet-base-v2", model_weights_path=None, eval=False):
+def load_model(vocabs, numerical_dim: int, embedding_dim: int, encoder_only: bool = False, device=torch.device("cpu"), model_arch_path="sentence-transformers/all-mpnet-base-v2", model_weights_path=None, eval=False):
     """
     Loads the DualEncoder model for training or inference.
     If model_weights_path is provided, it loads trained weights, otherwise it returns the untrained base model
     """
 
-    model = DualEncoder(vocabs, numerical_dim, encoder_only,model_arch_path)
+    model = DualEncoder(
+        vocabs=vocabs, 
+        numerical_dim=numerical_dim,
+        embedding_dim=embedding_dim, 
+        encoder_only=encoder_only, 
+        text_model_name=model_arch_path
+    )
     
     if model_weights_path:
         checkpoint = torch.load(model_weights_path, map_location=device, weights_only=True)
@@ -113,6 +119,7 @@ if __name__ == "__main__":
     model = load_model(
         vocabs=vocabs,
         numerical_dim=MODEL_PARAMS["numerical_dim"],  # Set to 0 since we're only encoding coffees
+        embedding_dim=MODEL_PARAMS["embedding_dim"],
         encoder_only=MODEL_PARAMS["encoder_only"],
         device=DEVICE,
         model_arch_path=SBERT_MODEL_DIR,
@@ -122,6 +129,7 @@ if __name__ == "__main__":
 
     print("Loading coffee data...")
     df = pd.read_csv(PREPROCESSED_DATA_PATH)
+    df["combined_text"] = df["blind assessment"].fillna("") + " " + df["bottom line"].fillna("")
     embeddings = None
     if args.build_embeddings:
         embeddings = build_embeddings(model, df, vocabs, DEVICE, enc_only=MODEL_PARAMS["encoder_only"])
