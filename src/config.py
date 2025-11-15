@@ -24,7 +24,7 @@ TRAIN_DATA_PATH = PROCESSED_DIR / "train.csv" #"train_data_8_11.csv"
 TEST_DATA_PATH = PROCESSED_DIR / "test.csv" #"test_data_8_11.csv"
 QUERIES_PATH = DATA_DIR / "outputs" / "llm-queries" / "synthetic_queries_np_4_1_nano.jsonl"
 VOCABS_PATH = MODELS_DIR / "vocabs" / "best_model_vocabs.json"
-
+RELEVANCE_CACHE = PROCESSED_DIR / "relevance_cache.json"
 
 # Model
 
