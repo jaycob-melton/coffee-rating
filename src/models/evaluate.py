@@ -7,7 +7,7 @@ import ast
 import re
 import os
 from tqdm import tqdm
-from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from functools import partial
 from src.models.utils import CoffeeDataset
 from src.models.model_utils import load_vocabs, load_model, build_embeddings, build_search_index
@@ -20,13 +20,17 @@ from src.config import (
     FAISS_INDEX_PATH,
     VOCABS_PATH,
     MODEL_PARAMS,
-    RELEVANCE_CACHE
+    RELEVANCE_CACHE,
+    ORIGINS,
+    FLAVORS,
+    VARIETALS,
+    PROCESS
 )
 
-universal_origins = set(json.loads(open("data/universal/known_origins.json").read()))
-universal_flavors = dict(json.loads(open("data/universal/flavor_keywords.json").read()))
-universal_varietals = list(json.loads(open("data/universal/coffee_varietals.json").read()))
-universal_processes = dict(json.loads(open("data/universal/process_keywords.json").read()))
+universal_origins = set(json.loads(open(ORIGINS).read()))
+universal_flavors = dict(json.loads(open(FLAVORS).read()))
+universal_varietals = list(json.loads(open(VARIETALS).read()))
+universal_processes = dict(json.loads(open(PROCESS).read()))
 
 UNIVERSAL_SET = {
     "origin": universal_origins,
@@ -38,14 +42,24 @@ UNIVERSAL_SET = {
     "test_method": {"hot_black", "espresso_with_milk", "espresso_black", "cold_with_milk", "hot_with_milk", "cold_black"},
 }
 
+# ATTRIBUTE_WEIGHTS = {
+#     'origin': 3,
+#     'process': 3,
+#     'varietal': 2,
+#     'flavor': 2,
+#     'notes': 1,
+#     'roast': 2,
+#     'test_method': 3
+# }
+
 ATTRIBUTE_WEIGHTS = {
-    'origin': 3,
-    'process': 3,
-    'varietal': 2,
-    'flavor': 2,
+    'origin': 1,
+    'process': 1,
+    'varietal': 1,
+    'flavor': 1,
     'notes': 1,
-    'roast': 2,
-    'test_method': 3
+    'roast': 1,
+    'test_method': 1
 }
 
 def calculate_relevance(query: str, coffee_row: pd.Series) -> int:
@@ -83,7 +97,6 @@ def calculate_relevance(query: str, coffee_row: pd.Series) -> int:
     
     achieved_score = 0
     
-    # Safely get the coffee's attributes
     try:
         coffee_origins = {o.lower() for o in ast.literal_eval(coffee_row.get('countries_extracted', '[]'))}
         coffee_processes = {p.lower() for p in ast.literal_eval(coffee_row.get('process', '[]'))}
@@ -94,7 +107,7 @@ def calculate_relevance(query: str, coffee_row: pd.Series) -> int:
         coffee_roast = {str(coffee_row.get('roast level', '')).lower()}
         coffee_test_method = {str(coffee_row.get('test_method', '')).lower()}
     except:
-        return 0 # Return 0 if coffee data is malformed
+        return 0 
 
     coffee_attributes = {
         'origin': coffee_origins,
@@ -184,6 +197,44 @@ def build_relevance_ground_truth(queries, df, relevance_thresh=1):
     return relevance_map
     
 
+def evaluate_single_query(query, correct_idx, model, df, index, relevance_map, k=10):
+    """
+    Worker function for evaluateing a single query and returns Hits@K and NDCG@K
+    """
+    with torch.no_grad():
+        query_embedding = model.encode_queries([query]).cpu().numpy()
+    
+    faiss.normalize_L2(query_embedding)
+
+    _, top_k_indices = index.search(query_embedding, k=k)
+    top_k_indices = top_k_indices[0]
+    hits_at_5 = 1 if correct_idx in top_k_indices[:5] else 0
+    hits_at_10 = 1 if correct_idx in top_k_indices[:10] else 0
+    
+    recommendation_relevance = [calculate_relevance(query, df.iloc[j]) for j in top_k_indices]
+
+    # Calculate NDCG@K
+    ndcg_5 = calculate_ndcg(recommendation_relevance, k=5)
+    ndcg_10 = calculate_ndcg(recommendation_relevance, k=10)
+    
+    # Calculate Precision@K
+    relevant_in_top_5 = sum(1 for score in recommendation_relevance if score >= 1)
+    relevant_in_top_10 = sum(1 for score in recommendation_relevance if score >= 1)
+    precision_5 = relevant_in_top_5 / 5
+    precision_10 = relevant_in_top_10 / 10
+    
+    # Calculate Recall@K
+    total_relevant = relevance_map.get(query, 0)
+    if total_relevant > 0:
+        recall_5 = relevant_in_top_5 / total_relevant
+        recall_10 = relevant_in_top_10 / total_relevant
+    else:
+        recall_5 = 0.0
+        recall_10 = 0.0
+    
+    return (hits_at_5, hits_at_10, ndcg_5, ndcg_10, precision_5, precision_10, recall_5, recall_10)
+    
+
 def evaluate(model, test_df, vocabs, training_data_path, device, precomputed_index=None):
     """
     Evaluates a model on the test set using Recall@K and NDCG@K
@@ -210,62 +261,81 @@ def evaluate(model, test_df, vocabs, training_data_path, device, precomputed_ind
                     test_queries.append(query)
                     test_pair_truth.append(correct_idx)
 
-    total_relevant_map = build_relevance_ground_truth(test_queries, test_df, relevance_thresh=1)
+    
+    # total_relevant_map = build_relevance_ground_truth(test_queries, test_df, relevance_thresh=1)
     
     hits_at_1 = 0
     hits_at_5 = 0
     hits_at_10 = 0
     total_queries = len(test_queries)
     
+    ndcg_1_scores = []
     ndcg_5_scores = []
     ndcg_10_scores = []
     precision_5_scores = []
     precision_10_scores = []
     recall_5_scores = []
     recall_10_scores = []
-    
-    with torch.no_grad():
-        for i in tqdm(range(total_queries), desc="Evaluating Queries"):
-            query = test_queries[i]
-            correct_idx = test_pair_truth[i]
-
-            query_embedding = model.encode_queries([query]).cpu().numpy()
-            faiss.normalize_L2(query_embedding)
-
-            _, top_k_indices = index.search(query_embedding, k=10)
-
-            # calculate Hits@K
-            top_k_indices = top_k_indices[0]
-
-            if correct_idx in top_k_indices[:1]:
-                hits_at_1 += 1
-            if correct_idx in top_k_indices[:5]:
-                hits_at_5 += 1
-            if correct_idx in top_k_indices[:10]:
-                hits_at_10 += 1
-
+      
+    if os.path.exists("temp_query_embeddings.npy"):
+        print("Loading cached query embeddings from temp_query_embeddings.npy...")
+        query_emb_mat = np.load("temp_query_embeddings.npy")
+    else:
+        BATCH_SIZE = 128
+        all_query_embeddings = []
+        for i in tqdm(range(0, total_queries, BATCH_SIZE), desc="Embedding Queries"):
+            queries = test_queries[i:i+BATCH_SIZE]
+            correct_idx = test_pair_truth[i:i+BATCH_SIZE]
             
-            recommendation_relevance = [calculate_relevance(query, test_df.iloc[j]) for j in top_k_indices]
-
-            # Calculate NDCG@K
-            ndcg_5_scores.append(calculate_ndcg(recommendation_relevance, k=5))
-            ndcg_10_scores.append(calculate_ndcg(recommendation_relevance, k=10))
-            
-            # Calculate Precision@K
-            relevant_in_top_5 = sum(1 for score in recommendation_relevance[:5] if score >= 1)
-            relevant_in_top_10 = sum(1 for score in recommendation_relevance[:10] if score >= 1)
-            precision_5_scores.append(relevant_in_top_5 / 5.)
-            precision_10_scores.append(relevant_in_top_10 / 10.)
-            
-            # Calculate Recall@K
-            total_relevant = total_relevant_map.get(query, 0)
-            if total_relevant > 0:
-                recall_5_scores.append(relevant_in_top_5 / total_relevant)
-                recall_10_scores.append(relevant_in_top_10 / total_relevant)
-            else:
-                recall_5_scores.append(0.0)
-                recall_10_scores.append(0.0)
+            with torch.no_grad():   
+                query_embeddings = model.encode_queries(queries).cpu().numpy()
                 
+            faiss.normalize_L2(query_embeddings)
+
+            all_query_embeddings.append(query_embeddings)
+            
+        query_emb_mat = np.vstack(all_query_embeddings)
+    
+        np.save("temp_query_embeddings.npy", query_emb_mat)
+    
+    print("Searching index for top-k results...")
+    _, top_k_indices_batch = index.search(query_emb_mat, k=10)    
+    
+    for i in tqdm(range(total_queries), desc="Calculating Evaluation Metrics"):
+        query = test_queries[i]
+        correct_idx = test_pair_truth[i]
+        top_k_indices = top_k_indices_batch[i]
+        
+        if correct_idx in top_k_indices[:1]:
+            hits_at_1 += 1
+        if correct_idx in top_k_indices[:5]:
+            hits_at_5 += 1
+        if correct_idx in top_k_indices[:10]:
+            hits_at_10 += 1
+
+        
+        recommendation_relevance = [calculate_relevance(query, test_df.iloc[k]) for k in top_k_indices]
+
+        # Calculate NDCG@K
+        ndcg_1_scores.append(calculate_ndcg(recommendation_relevance, k=1))
+        ndcg_5_scores.append(calculate_ndcg(recommendation_relevance, k=5))
+        ndcg_10_scores.append(calculate_ndcg(recommendation_relevance, k=10))
+        
+        # Calculate Precision@K
+        relevant_in_top_5 = np.sum(np.array(recommendation_relevance)[:5] > 0)
+        relevant_in_top_10 = np.sum(np.array(recommendation_relevance)[:10] > 0)
+        precision_5_scores.append(relevant_in_top_5 / 5.)
+        precision_10_scores.append(relevant_in_top_10 / 10.)
+        
+        # Calculate Recall@K
+        # total_relevant = total_relevant_map.get(query, 0)
+        # if total_relevant > 0:
+        #     recall_5_scores.append(relevant_in_top_5 / total_relevant)
+        #     recall_10_scores.append(relevant_in_top_10 / total_relevant)
+        # else:
+        #     recall_5_scores.append(0.0)
+        #     recall_10_scores.append(0.0)
+            
     print("\n--- Evaluation Results ---")
     print(f"Total Test Queries: {total_queries}")
     
@@ -279,6 +349,7 @@ def evaluate(model, test_df, vocabs, training_data_path, device, precomputed_ind
     recall_5 = np.mean(recall_5_scores)
     recall_10 = np.mean(recall_10_scores)
     
+    ndcg_1 = np.mean(ndcg_1_scores)
     ndcg_5 = np.mean(ndcg_5_scores)
     ndcg_10 = np.mean(ndcg_10_scores)
     
@@ -291,14 +362,15 @@ def evaluate(model, test_df, vocabs, training_data_path, device, precomputed_ind
     print(f"Precision@5:  {precision_5:.4f}")
     print(f"Precision@10:  {precision_10:.4f}")
     
-    print("\n--- Recall@K ---")
-    print(f"Recall@5:  {recall_5:.4f}")
-    print(f"Recall@10:  {recall_10:.4f}")
+    # print("\n--- Recall@K ---")
+    # print(f"Recall@5:  {recall_5:.4f}")
+    # print(f"Recall@10:  {recall_10:.4f}")
     
     print("\n--- NDCG@K ---")
+    print(f"NDCG@1: {ndcg_1:.4f}")
     print(f"NDCG@5:  {ndcg_5:.4f}")
     print(f"NDCG@10:  {ndcg_10:.4f}")
-    return hits_at_1, hits_at_5, hits_at_10, precision_5, precision_10, recall_5, recall_10, ndcg_5, ndcg_10
+    return hits_at_1, hits_at_5, hits_at_10, precision_5, precision_10, recall_5, recall_10, ndcg_1, ndcg_5, ndcg_10
 
 
 if __name__ == "__main__":
