@@ -12,6 +12,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DATA_DIR = PROJECT_ROOT / "data"
 PROCESSED_DIR = DATA_DIR / "processed"
 RAW_DIR = DATA_DIR / "raw"
+UNI_DIR = DATA_DIR / "universal"
 MODELS_DIR = PROJECT_ROOT / "models"
 EMBEDDINGS_DIR = MODELS_DIR / "embeddings"
 FAISS_DIR = MODELS_DIR / "faiss"
@@ -22,9 +23,13 @@ RAW_DATA_PATH = RAW_DIR / "full_data_scrape.csv"
 PREPROCESSED_DATA_PATH = PROCESSED_DIR / "preprocessed_data.csv"
 TRAIN_DATA_PATH = PROCESSED_DIR / "train.csv" #"train_data_8_11.csv"
 TEST_DATA_PATH = PROCESSED_DIR / "test.csv" #"test_data_8_11.csv"
-QUERIES_PATH = DATA_DIR / "outputs" / "llm-queries" / "synthetic_queries_np_4_1_nano.jsonl"
+QUERIES_PATH = DATA_DIR / "outputs" / "llm-queries" / "synthetic_queries_np_4_1_nano.jsonl"#"training_data.jsonl" #"synthetic_queries_np_4_1_nano.jsonl"
 VOCABS_PATH = MODELS_DIR / "vocabs" / "best_model_vocabs.json"
-
+RELEVANCE_CACHE = PROCESSED_DIR / "relevance_cache_2.json"
+VARIETALS = UNI_DIR / "coffee_varietals.json"
+FLAVORS = UNI_DIR / "flavor_keywords.json"
+ORIGINS = UNI_DIR / "known_origins.json"
+PROCESS = UNI_DIR / "process_keywords.json"
 
 # Model
 

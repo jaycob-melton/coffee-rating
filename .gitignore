@@ -8,6 +8,7 @@ models/
 .vscode/
 .~lock*
 *.yml
+*.npy
 GithubToken.txt
 OpenAI-Token.txt
 query.txt
