@@ -25,7 +25,8 @@ from src.config import (
 
 #torch.manual_seed(189)  # for reproducibility
 
-def train(device):
+def train(device, num_epochs=TRAIN_PARAMS["num_epochs"], head_lr=TRAIN_PARAMS["head_lr"], transformer_lr=TRAIN_PARAMS["transformer_lr"], 
+          freeze_transformer=False, model_path=None, suffix=""):
     print(f"Using device: {device}")
 
     # Load data
@@ -48,29 +49,37 @@ def train(device):
 
     model = load_model(
         vocabs=vocabs,
-        numerical_dim=len(full_coffee_dataset.numerical_cols),
-        embedding_dim=MODEL_PARAMS["embedding_dim"],
-        encoder_only=MODEL_PARAMS["encoder_only"],
-        device=device,
-        model_arch_path=SBERT_MODEL_DIR,
-        model_weights_path=TRAINED_MODEL_PATH,
+        weights_path=model_path,
+        device=device
     )
 
     loss_fn = nn.TripletMarginLoss(margin=TRAIN_PARAMS["margin"])
 
-    transformer_params = model.transformer.parameters()
+    if freeze_transformer:
+        print("Freezing transfomer parameters.")
+        for param in model.transformer.parameters():
+            param.requires_grad = False
+        transformer_params = []
+        current_transformer_lr = 0.0
+    else:
+        print("Transforerm parameters will be updated.")
+        for param in model.transformer.parameters():
+            param.requires_grad = True
+        transformer_params = model.transformer.parameters()
+        current_transformer_lr = transformer_lr
+
     if model.encoder_only:
         print("Training with encoder only. No head parameters will be updated.")
         head_params = []
-        head_lr = 0.
+        current_head_lr = 0.
     else:
         print("Training with full model. Head parameters will be updated.")
         head_params = list(model.metadata_encoder.parameters()) + list(model.fusion_layer.parameters())
-        head_lr = TRAIN_PARAMS["head_lr"]
+        current_head_lr = TRAIN_PARAMS["head_lr"]
 
     optimizer = AdamW([
-        {"params": transformer_params, "lr": TRAIN_PARAMS["transformer_lr"]},
-        {"params": head_params, "lr": head_lr}
+        {"params": transformer_params, "lr": current_transformer_lr},
+        {"params": head_params, "lr": current_head_lr}
     ])
 
     print("Starting training...")
@@ -79,7 +88,7 @@ def train(device):
         "semi_hard_negatives": [],
     }
 
-    for epoch in range(TRAIN_PARAMS["num_epochs"]):
+    for epoch in range(num_epochs):
         model.train()
         total_loss = 0
         num_semi_hard = 0
@@ -94,10 +103,10 @@ def train(device):
             use_semi_hard_mining = len(last_4_losses) >= 4 and all(loss < 0.02 for loss in last_3_relative_diff) 
 
         if use_semi_hard_mining:
-            print(f"Epoch {epoch+1}/{TRAIN_PARAMS['num_epochs']} - Using Semi-Hard Negative Mining")
+            print(f"Epoch {epoch+1}/{num_epochs} - Using Semi-Hard Negative Mining")
 
         else:
-            print(f"Epoch {epoch+1}/{TRAIN_PARAMS['num_epochs']} - Using In-Batch Negative Mining")
+            print(f"Epoch {epoch+1}/{num_epochs} - Using In-Batch Negative Mining")
         for queries, positive_indices, positive_coffee_batch in tqdm(train_loader, desc=f"Epoch {epoch+1}"):
             for key, val in positive_coffee_batch.items():
                 if isinstance(val, torch.Tensor):
@@ -150,7 +159,7 @@ def train(device):
                         rand_idx = semi_hard_indices[random.randint(0, len(semi_hard_indices)-1)]
                         num_semi_hard += 1
                     else:
-                        rand_idx = torch.argmin(neg_dists)
+                        rand_idx = (i + 1) % len(queries)
                     
                     final_negative_embeddings.append(negative_embeddings[rand_idx])
                 
@@ -176,42 +185,44 @@ def train(device):
         if use_semi_hard_mining:
             print(f"Number of Semi-hard Negatives Used: {num_semi_hard}")
 
-        torch.save(model.state_dict(), f"{MODEL_SAVE_PATH}{epoch+1}.pth")
-
-    if DEVICE.type == "cuda":
-        del model
-        torch.cuda.empty_cache()
+        torch.save(model.state_dict(), f"{MODEL_SAVE_PATH}{suffix}_{epoch+1}.pth")
     
-    return loss_info
+    final_model_path = f"{MODEL_SAVE_PATH}{suffix}_{num_epochs}.pth"
+    # if DEVICE.type == "cuda":
+    #     del model
+    #     torch.cuda.empty_cache()
+    
+    return final_model_path, loss_info
 
 
 if __name__ == "__main__":
     DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    # config = {
-    #     # Data paths
-    #     "preprocessed_data": TRAIN_DATA_PATH,
-    #     "queries_path": QUERIES_PATH,
-    #     "vocabs": VOCABS_PATH,
 
-    #     # Model paths
-    #     "enc_model_path": SBERT_MODEL_DIR,
-    #     "model_path": None,#TRAINED_MODEL_PATH,
-    #     "save_path": MODEL_SAVE_PATH,
 
-    #     # Training hyperparameters
-    #     "batch_size": TRAIN_PARAMS["batch_size"],
-    #     "transformer_lr": TRAIN_PARAMS["transformer_lr"],
-    #     "head_lr": TRAIN_PARAMS["head_lr"],
-    #     "epochs": TRAIN_PARAMS["num_epochs"],
-    #     "margin": TRAIN_PARAMS["margin"],
-    #     "semi_hard_mining_start_epoch": TRAIN_PARAMS["semi_hard_mining_start_epoch"],
+    warmup_model_path, warmup_loss_info = train(
+        device=DEVICE, 
+        num_epochs=TRAIN_PARAMS["warmup_epochs"],
+        head_lr=TRAIN_PARAMS["warmup_head_lr"],
+        freeze_transformer=True,
+        suffix="warmup"
+    )
 
-    #     "device": DEVICE
-    # }
+    final_model_path, finetune_loss_info = train(
+        device=DEVICE,
+        num_epochs=TRAIN_PARAMS["num_epochs"],
+        haed_lr=TRAIN_PARAMS["head_lr"],
+        transformer_lr=TRAIN_PARAMS["transformer_lr"],
+        freeze_transformer=False,
+        model_path=warmup_model_path,
+        suffix="finetune"
+    )
 
-    loss_info = train(DEVICE)
+    all_loss_info = {
+        key: warmup_loss_info.get(key, []) + finetune_loss_info.get(key, [])
+        for key in set(warmup_loss_info.keys()) | set(finetune_loss_info.keys())
+    }
 
-    pd.DataFrame(loss_info).to_csv(f"data/outputs/loss-info/loss_info_{today.month}_{today.day}.csv", index=False)
+    pd.DataFrame(all_loss_info).to_csv(f"data/outputs/loss-info/loss_info_{today.month}_{today.day}.csv", index=False)
 
     

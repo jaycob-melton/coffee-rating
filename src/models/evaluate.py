@@ -418,13 +418,8 @@ if __name__ == "__main__":
     # model, vocabs = load_model_inference(TRAINED_MODEL_PATH, numerical_dim=10, device=DEVICE, model_location=SBERT_MODEL_DIR)
     vocabs = load_vocabs(VOCABS_PATH)
     model = load_model(
-        vocabs, 
-        numerical_dim=MODEL_PARAMS["numerical_dim"],
-        embedding_dim=MODEL_PARAMS["embedding_dim"],
-        encoder_only=MODEL_PARAMS["encoder_only"], 
-        device=DEVICE, 
-        model_arch_path=SBERT_MODEL_DIR, 
-        model_weights_path=TRAINED_MODEL_PATH, 
+        vocabs=vocabs,
+        device=DEVICE,
         eval=True
     )
     evaluate(model, df, vocabs, QUERIES_PATH, DEVICE, FAISS_INDEX_PATH)

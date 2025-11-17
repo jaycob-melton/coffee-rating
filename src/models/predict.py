@@ -55,12 +55,7 @@ if __name__ == "__main__":
 
     model = load_model(
         vocabs=vocabs,
-        numerical_dim=MODEL_PARAMS["numerical_dim"],
-        embedding_dim=MODEL_PARAMS["embedding_dim"],
-        encoder_only=MODEL_PARAMS["encoder_only"],
         device=DEVICE,
-        model_arch_path=SBERT_MODEL_DIR,
-        model_weights_path=TRAINED_MODEL_PATH,
         eval=True
     )
 

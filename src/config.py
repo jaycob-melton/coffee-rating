@@ -35,12 +35,12 @@ PROCESS = UNI_DIR / "process_keywords.json"
 
 # Architecture 
 SBERT_MODEL_DIR = MODELS_DIR / "sbert_model" #"sentence-transformers/all-MiniLM-L6-v2" # PROJECT_ROOT / "sbert_model" # set to "sentence-transformers/all-mpnet-base-v2" to use model from HuggingFace
-# Weights
+# Weightss
 TRAINED_MODEL_PATH = MODEL_WEIGHTS_DIR / "11-13" / "encoder_only_epoch_20.pth" #MODEL_WEIGHTS_DIR / "11-12" / "encoder_only_epoch_6_shnm_epoch_2.pth" # None # MODEL_WEIGHTS_DIR / "11-12" / "encoder_only_epoch_6_shnm_epoch_2.pth" #"best_model_weights_only.pth" # switch to none for untrained model #"8-11" / "coffee_model_epoch_11_semi_hard_3.pth"
 # Embeddings Save/Load Path
 EMBEDDINGS_PATH = EMBEDDINGS_DIR / "trained_encoder_20_epochs.npy"
 # Index Save/Load Path
-FAISS_INDEX_PATH = FAISS_DIR / "trained_encoder_20_epochs.bin" #"faiss_index.bin"
+FAISS_INDEX_PATH = FAISS_DIR / "encoder_only_epoch_20_index.bin" #"faiss_index.bin"
 # Query Embeddings Save/Load Path
 QUERY_EMBEDDINGS = EMBEDDINGS_DIR / "trained_encoder_20_epochs_query_embeddings.npy"
 # Train Save Path
@@ -51,17 +51,25 @@ MODEL_SAVE_PATH = MODEL_SAVE_DIR / "coffee_model_epoch_"
 # MODEL HYPERPARAMS
 TRAIN_PARAMS = {
     "batch_size": 32,
+    "semi_hard_mining_start_epoch": -1,
+    "margin": 0.2,
+    
+    # stage 1: Warm-up (Freeze Transformer, train head)
+    "warmup_epochs": 3,
+    "warmup_head_lr": 1e-3,
+
+    # stage 2: Unfreeze transformer, train all layers
     "transformer_lr": 1e-5,
     "head_lr": 1e-6,
     "num_epochs": 10,
-    "semi_hard_mining_start_epoch": 3,
-    "margin": 0.2,
 }
 
 MODEL_PARAMS = {
     "numerical_dim": 10,
     "embedding_dim": 768, #384, 
     "encoder_only": True,
+    "fc_dropout": 0.1,
+    "all_dropout": 0.2,
 }
 
 # API KEYS

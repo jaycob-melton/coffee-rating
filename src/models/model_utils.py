@@ -24,7 +24,7 @@ def load_vocabs(vocabs_path):
     return vocabs
 
 
-def load_model(vocabs, numerical_dim: int, embedding_dim: int, encoder_only: bool = False, device=torch.device("cpu"), model_arch_path="sentence-transformers/all-mpnet-base-v2", model_weights_path=None, eval=False):
+def load_model(vocabs, model_params=MODEL_PARAMS, text_encoder_dir=SBERT_MODEL_DIR, weights_path=TRAINED_MODEL_PATH, device=torch.device("cpu"), eval=False):#numerical_dim: int, embedding_dim: int, encoder_only: bool = False, device=torch.device("cpu"), model_arch_path="sentence-transformers/#all-mpnet-base-v2", model_weights_path=None, eval=False):
     """
     Loads the DualEncoder model for training or inference.
     If model_weights_path is provided, it loads trained weights, otherwise it returns the untrained base model
@@ -32,18 +32,20 @@ def load_model(vocabs, numerical_dim: int, embedding_dim: int, encoder_only: boo
 
     model = DualEncoder(
         vocabs=vocabs, 
-        numerical_dim=numerical_dim,
-        embedding_dim=embedding_dim, 
-        encoder_only=encoder_only, 
-        text_model_name=model_arch_path
+        numerical_dim=model_params["numerical_dim"],
+        embedding_dim=model_params["embedding_dim"], 
+        fc_dropout=model_params["fc_dropout"],
+        all_dropout=model_params["all_dropout"],
+        encoder_only=model_params["encoder_only"], 
+        text_model_name=text_encoder_dir,
     )
     
-    if model_weights_path:
-        checkpoint = torch.load(model_weights_path, map_location=device, weights_only=True)
+    if weights_path:
+        checkpoint = torch.load(weights_path, map_location=device, weights_only=True)
         model.load_state_dict(checkpoint)
-        print(f"Model loaded from {model_weights_path}.")
+        print(f"Model loaded from {weights_path}.")
     else:
-        print(f"No model weights provided. Loaded untrained model with architecture {model_arch_path}.")
+        print(f"No model weights provided. Loaded untrained model with architecture {text_encoder_dir}.")
     
     model.to(device)
     if eval:
