@@ -7,6 +7,7 @@ import ast
 import re
 import os
 from tqdm import tqdm
+import argparse
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from functools import partial
 from src.models.utils import CoffeeDataset
@@ -24,7 +25,8 @@ from src.config import (
     ORIGINS,
     FLAVORS,
     VARIETALS,
-    PROCESS
+    PROCESS,
+    QUERY_EMBEDDINGS
 )
 
 universal_origins = set(json.loads(open(ORIGINS).read()))
@@ -89,7 +91,10 @@ def calculate_relevance(query: str, coffee_row: pd.Series) -> int:
         found_keywords = {kw for kw in keywords if re.search(r'\b' + re.escape(kw) + r'\b', query)}
         if found_keywords:
             query_attributes[attr_type] = found_keywords
-            total_possible_score += ATTRIBUTE_WEIGHTS[attr_type] * len(found_keywords)
+            if attr_type == "notes":
+                total_possible_score += ATTRIBUTE_WEIGHTS[attr_type] * len(found_keywords) * 2
+            else:
+                total_possible_score += ATTRIBUTE_WEIGHTS[attr_type] * len(found_keywords)
 
     if total_possible_score == 0:
         return 0 # The query is too generic to be scored
@@ -119,12 +124,27 @@ def calculate_relevance(query: str, coffee_row: pd.Series) -> int:
         'test_method': coffee_test_method
     }
     
+    note_to_flavor_category = {note.lower(): category.lower() for category, notes in universal_flavors.items() for note in notes}
+    coffee_notes_set = coffee_attributes.get('notes', set())
+    coffee_notes_categories = {note_to_flavor_category.get(note) for note in coffee_notes_set if note_to_flavor_category.get(note)}
+
     for attr_type, query_values in query_attributes.items():
-        matches = query_values.intersection(coffee_attributes.get(attr_type, set()))
-        achieved_score += ATTRIBUTE_WEIGHTS[attr_type] * len(matches)
+        if attr_type == "notes":
+            for query_note in query_values:
+                note_score = 0
+                if query_note in coffee_notes_set:
+                    note_score = 2  # Exact match (category match is implied)
+                else:
+                    query_note_category = note_to_flavor_category.get(query_note)
+                    if query_note_category and query_note_category in coffee_notes_categories:
+                        note_score = 1  # Category match only
+                achieved_score += ATTRIBUTE_WEIGHTS[attr_type] * note_score
+        else:
+            matches = query_values.intersection(coffee_attributes.get(attr_type, set()))
+            achieved_score += ATTRIBUTE_WEIGHTS[attr_type] * len(matches)
         
     
-    match_percentage = achieved_score / total_possible_score
+    match_percentage = achieved_score / total_possible_score if total_possible_score > 0 else 0
     
     if match_percentage >= 0.99: return 4 # Perfect
     if match_percentage >= 0.75: return 3 # High
@@ -235,7 +255,7 @@ def evaluate_single_query(query, correct_idx, model, df, index, relevance_map, k
     return (hits_at_5, hits_at_10, ndcg_5, ndcg_10, precision_5, precision_10, recall_5, recall_10)
     
 
-def evaluate(model, test_df, vocabs, training_data_path, device, precomputed_index=None):
+def evaluate(model, test_df, vocabs, training_data_path, device, precomputed_index_path=FAISS_INDEX_PATH, query_cache=QUERY_EMBEDDINGS, strictness=1):
     """
     Evaluates a model on the test set using Recall@K and NDCG@K
     """
@@ -243,10 +263,10 @@ def evaluate(model, test_df, vocabs, training_data_path, device, precomputed_ind
 
     # test_dataset = CoffeeDataset(test_df, vocabs)
     
-    index = faiss.read_index(str(FAISS_INDEX_PATH))
+    index = faiss.read_index(str(precomputed_index_path))
 
-    # generate the test queries and evaluate
-    print("Getting test queries and evaluating recall and ndcg...")
+    # generate the test queries
+    print("Getting test queries...")
     test_queries = []
     test_pair_truth = []
     test_id2idx = {cid: i for i, cid in test_df["id"].items()}
@@ -269,17 +289,17 @@ def evaluate(model, test_df, vocabs, training_data_path, device, precomputed_ind
     hits_at_10 = 0
     total_queries = len(test_queries)
     
-    ndcg_1_scores = []
-    ndcg_5_scores = []
     ndcg_10_scores = []
-    precision_5_scores = []
     precision_10_scores = []
+    precision_10_mid_scores = []
+    precision_10_strict_scores = []
+    precision_10_perfect_scores = []
     recall_5_scores = []
     recall_10_scores = []
       
-    if os.path.exists("temp_query_embeddings.npy"):
+    if os.path.exists(query_cache):
         print("Loading cached query embeddings from temp_query_embeddings.npy...")
-        query_emb_mat = np.load("temp_query_embeddings.npy")
+        query_emb_mat = np.load(query_cache)
     else:
         BATCH_SIZE = 128
         all_query_embeddings = []
@@ -296,7 +316,7 @@ def evaluate(model, test_df, vocabs, training_data_path, device, precomputed_ind
             
         query_emb_mat = np.vstack(all_query_embeddings)
     
-        np.save("temp_query_embeddings.npy", query_emb_mat)
+        np.save(query_cache, query_emb_mat)
     
     print("Searching index for top-k results...")
     _, top_k_indices_batch = index.search(query_emb_mat, k=10)    
@@ -317,16 +337,14 @@ def evaluate(model, test_df, vocabs, training_data_path, device, precomputed_ind
         recommendation_relevance = [calculate_relevance(query, test_df.iloc[k]) for k in top_k_indices]
 
         # Calculate NDCG@K
-        ndcg_1_scores.append(calculate_ndcg(recommendation_relevance, k=1))
-        ndcg_5_scores.append(calculate_ndcg(recommendation_relevance, k=5))
         ndcg_10_scores.append(calculate_ndcg(recommendation_relevance, k=10))
         
         # Calculate Precision@K
-        relevant_in_top_5 = np.sum(np.array(recommendation_relevance)[:5] > 0)
-        relevant_in_top_10 = np.sum(np.array(recommendation_relevance)[:10] > 0)
-        precision_5_scores.append(relevant_in_top_5 / 5.)
-        precision_10_scores.append(relevant_in_top_10 / 10.)
-        
+        precision_10_scores.append(np.sum(np.array(recommendation_relevance)[:10] >= 1) / 10.)
+        precision_10_mid_scores.append(np.sum(np.array(recommendation_relevance)[:10] >= 2) / 10.)
+        precision_10_strict_scores.append(np.sum(np.array(recommendation_relevance)[:10] >= 3) / 10.)
+        precision_10_perfect_scores.append(np.sum(np.array(recommendation_relevance)[:10] >= 4) / 10.)
+
         # Calculate Recall@K
         # total_relevant = total_relevant_map.get(query, 0)
         # if total_relevant > 0:
@@ -343,37 +361,55 @@ def evaluate(model, test_df, vocabs, training_data_path, device, precomputed_ind
     hits_at_5 = float(hits_at_5) / total_queries
     hits_at_10 = float(hits_at_10) / total_queries
     
-    precision_5 = np.mean(precision_5_scores)
     precision_10 = np.mean(precision_10_scores)
+    precision_10_mid = np.mean(precision_10_mid_scores)
+    precision_10_strict = np.mean(precision_10_strict_scores)
+    precision_10_perfect = np.mean(precision_10_perfect_scores)
     
-    recall_5 = np.mean(recall_5_scores)
-    recall_10 = np.mean(recall_10_scores)
+    # recall_5 = np.mean(recall_5_scores)
+    # recall_10 = np.mean(recall_10_scores)
     
-    ndcg_1 = np.mean(ndcg_1_scores)
-    ndcg_5 = np.mean(ndcg_5_scores)
     ndcg_10 = np.mean(ndcg_10_scores)
     
     print("\n--- Hits@K ---")
-    print(f"Hits@1:  {hits_at_1:.4f}")
-    print(f"Hits@5:  {hits_at_5:.4f}")
-    print(f"Hits@10: {hits_at_10:.4f}")
+    print(f"Hits@1:                 {hits_at_1:.4f}")
+    print(f"Hits@5:                 {hits_at_5:.4f}")
+    print(f"Hits@10:                {hits_at_10:.4f}")
     
     print("\n--- Precision@K ---")
-    print(f"Precision@5:  {precision_5:.4f}")
-    print(f"Precision@10:  {precision_10:.4f}")
+    print(f"Precision@10:           {precision_10:.4f}")
+    print(f"Precision@10 (Mid):     {precision_10_mid:.4f}")
+    print(f"Precision@10 (Strict):  {precision_10_strict:.4f}")
+    print(f"Precision@10 (Perfect): {precision_10_perfect:.4f}")
     
     # print("\n--- Recall@K ---")
     # print(f"Recall@5:  {recall_5:.4f}")
     # print(f"Recall@10:  {recall_10:.4f}")
     
     print("\n--- NDCG@K ---")
-    print(f"NDCG@1: {ndcg_1:.4f}")
-    print(f"NDCG@5:  {ndcg_5:.4f}")
-    print(f"NDCG@10:  {ndcg_10:.4f}")
-    return hits_at_1, hits_at_5, hits_at_10, precision_5, precision_10, recall_5, recall_10, ndcg_1, ndcg_5, ndcg_10
+    print(f"NDCG@10:                {ndcg_10:.4f}")
+    return hits_at_1, hits_at_5, hits_at_10, precision_10, precision_10_mid, precision_10_strict, precision_10_perfect, ndcg_10
 
 
 if __name__ == "__main__":
+
+    # def check_valid(value):
+    #     if int(value) and 1 <= value <= 4:
+    #         return value
+    #     else:
+    #         raise argparse.ArgumentTypeError("%s is an invalid value" % value)
+    
+    # parser = argparse.ArgumentParser(description="Evaluate a model's recommendations across all queries.")
+    # parser.add_argument(
+    #     "--strictness", 
+    #     type=int, 
+    #     default=1, 
+    #     choices=range(1, 5),
+    #     help="Controls how close of a match the Precision metric requires for a 'relevant' recommendation. Valid values are [1, 2, 3, 4]."
+    # )
+    
+    # args = parser.parse_args()
+    
     DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print("Device:", DEVICE)
     print("Loading Coffee Data...")

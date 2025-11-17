@@ -25,7 +25,7 @@ TRAIN_DATA_PATH = PROCESSED_DIR / "train.csv" #"train_data_8_11.csv"
 TEST_DATA_PATH = PROCESSED_DIR / "test.csv" #"test_data_8_11.csv"
 QUERIES_PATH = DATA_DIR / "outputs" / "llm-queries" / "synthetic_queries_np_4_1_nano.jsonl"#"training_data.jsonl" #"synthetic_queries_np_4_1_nano.jsonl"
 VOCABS_PATH = MODELS_DIR / "vocabs" / "best_model_vocabs.json"
-RELEVANCE_CACHE = PROCESSED_DIR / "relevance_cache_2.json"
+RELEVANCE_CACHE = PROCESSED_DIR / "relevance_cache.json"
 VARIETALS = UNI_DIR / "coffee_varietals.json"
 FLAVORS = UNI_DIR / "flavor_keywords.json"
 ORIGINS = UNI_DIR / "known_origins.json"
@@ -36,11 +36,13 @@ PROCESS = UNI_DIR / "process_keywords.json"
 # Architecture 
 SBERT_MODEL_DIR = MODELS_DIR / "sbert_model" #"sentence-transformers/all-MiniLM-L6-v2" # PROJECT_ROOT / "sbert_model" # set to "sentence-transformers/all-mpnet-base-v2" to use model from HuggingFace
 # Weights
-TRAINED_MODEL_PATH = MODEL_WEIGHTS_DIR / "11-12" / "encoder_only_epoch_6_shnm_epoch_2.pth" # None # MODEL_WEIGHTS_DIR / "11-12" / "encoder_only_epoch_6_shnm_epoch_2.pth" #"best_model_weights_only.pth" # switch to none for untrained model #"8-11" / "coffee_model_epoch_11_semi_hard_3.pth"
+TRAINED_MODEL_PATH = MODEL_WEIGHTS_DIR / "11-13" / "encoder_only_epoch_20.pth" #MODEL_WEIGHTS_DIR / "11-12" / "encoder_only_epoch_6_shnm_epoch_2.pth" # None # MODEL_WEIGHTS_DIR / "11-12" / "encoder_only_epoch_6_shnm_epoch_2.pth" #"best_model_weights_only.pth" # switch to none for untrained model #"8-11" / "coffee_model_epoch_11_semi_hard_3.pth"
 # Embeddings Save/Load Path
-EMBEDDINGS_PATH = EMBEDDINGS_DIR / "trained_encoder_shnm_embeddings.npy"
+EMBEDDINGS_PATH = EMBEDDINGS_DIR / "trained_encoder_20_epochs.npy"
 # Index Save/Load Path
-FAISS_INDEX_PATH = FAISS_DIR / "trained_encoder_shnm_index.bin"#"faiss_index.bin"
+FAISS_INDEX_PATH = FAISS_DIR / "trained_encoder_20_epochs.bin" #"faiss_index.bin"
+# Query Embeddings Save/Load Path
+QUERY_EMBEDDINGS = EMBEDDINGS_DIR / "trained_encoder_20_epochs_query_embeddings.npy"
 # Train Save Path
 MODEL_SAVE_DIR = MODEL_WEIGHTS_DIR / f"{today.month}-{today.day}"
 MODEL_SAVE_DIR.mkdir(parents=True, exist_ok=True)
