@@ -116,3 +116,33 @@ class DualEncoder(nn.Module):
             return text_emb
         metadata_emb = self.metadata_encoder(coffee_batch["numericals"], coffee_batch["categoricals"])
         return self.fusion_layer(torch.cat([text_emb, metadata_emb], dim=-1))
+    
+    
+class CrossEncoder(nn.Module):
+    def __init__(self, text_model_name="sentence-transformers/all-mpnet-base-v2"):
+        super().__init__()
+        self.transformer = AutoModel.from_pretrained(text_model_name)
+        self.tokenizer = AutoTokenizer.from_pretrained(text_model_name, use_fast=True)
+        
+        self.classifier = nn.Linear(self.transformer.config.hidden_size, 1)
+        
+    def forward(self, queries, coffees, max_length=256):
+        device = next(self.parameters()).device
+        
+        inputs = self.tokenizer(
+            queries, 
+            coffees,
+            padding=True,
+            truncation=True,
+            max_length=max_length,
+            return_tensors="pt"
+        )
+        inputs = {k: v.to(device) for k, v in inputs.items()}
+        
+        outputs = self.transformer(**inputs)
+        
+        cls_embedding = outputs.pooler_output
+        
+        score_logit = self.classifier(cls_embedding)
+        
+        return score_logit
