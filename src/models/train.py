@@ -31,6 +31,7 @@ def train(device, num_epochs=TRAIN_PARAMS["num_epochs"], head_lr=TRAIN_PARAMS["h
 
     # Load data
     df = pd.read_csv(PREPROCESSED_DATA_PATH)
+    df["combined_text"] = df["blind assessment"] + " " + df["notes"] + " " + df["bottom line"]
     vocabs = load_vocabs(VOCABS_PATH)
 
     # used by collate to look up coffee data by index
@@ -62,13 +63,13 @@ def train(device, num_epochs=TRAIN_PARAMS["num_epochs"], head_lr=TRAIN_PARAMS["h
     loss_fn = nn.TripletMarginLoss(margin=TRAIN_PARAMS["margin"])
 
     if freeze_transformer:
-        print("Freezing transfomer parameters.")
+        print("Freezing transformer parameters.")
         for param in model.transformer.parameters():
             param.requires_grad = False
         transformer_params = []
         current_transformer_lr = 0.0
     else:
-        print("Transforerm parameters will be updated.")
+        print("Transformer parameters will be updated.")
         for param in model.transformer.parameters():
             param.requires_grad = True
         transformer_params = model.transformer.parameters()

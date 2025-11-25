@@ -26,7 +26,7 @@ from src.config import (
     FLAVORS,
     VARIETALS,
     PROCESS,
-    QUERY_EMBEDDINGS
+    QUERY_EMBEDDINGS,
 )
 
 universal_origins = set(json.loads(open(ORIGINS).read()))
@@ -298,7 +298,7 @@ def evaluate(model, test_df, vocabs, training_data_path, device, precomputed_ind
     recall_10_scores = []
       
     if os.path.exists(query_cache):
-        print("Loading cached query embeddings from temp_query_embeddings.npy...")
+        print(f"Loading cached query embeddings from {query_cache}...")
         query_emb_mat = np.load(query_cache)
     else:
         BATCH_SIZE = 128
