@@ -34,9 +34,9 @@ PROCESS = UNI_DIR / "process_keywords.json"
 # Model
 
 # Architecture 
-SBERT_MODEL_DIR = MODELS_DIR / "sbert_model" #"sentence-transformers/all-MiniLM-L6-v2" # PROJECT_ROOT / "sbert_model" # set to "sentence-transformers/all-mpnet-base-v2" to use model from HuggingFace
+SBERT_MODEL_DIR = MODELS_DIR / "MiniLM-L6-v2" #"sentence-transformers/all-MiniLM-L6-v2" # PROJECT_ROOT / "sbert_model" # set to "sentence-transformers/all-mpnet-base-v2" to use model from HuggingFace
 # Weightss
-TRAINED_MODEL_PATH = MODEL_WEIGHTS_DIR / "11-13" / "encoder_only_epoch_20.pth" #MODEL_WEIGHTS_DIR / "11-12" / "encoder_only_epoch_6_shnm_epoch_2.pth" # None # MODEL_WEIGHTS_DIR / "11-12" / "encoder_only_epoch_6_shnm_epoch_2.pth" #"best_model_weights_only.pth" # switch to none for untrained model #"8-11" / "coffee_model_epoch_11_semi_hard_3.pth"
+TRAINED_MODEL_PATH = None #MODEL_WEIGHTS_DIR / "11-13" / "encoder_only_epoch_20.pth" #MODEL_WEIGHTS_DIR / "11-12" / "encoder_only_epoch_6_shnm_epoch_2.pth" # None # MODEL_WEIGHTS_DIR / "11-12" / "encoder_only_epoch_6_shnm_epoch_2.pth" #"best_model_weights_only.pth" # switch to none for untrained model #"8-11" / "coffee_model_epoch_11_semi_hard_3.pth"
 # Embeddings Save/Load Path
 EMBEDDINGS_PATH = EMBEDDINGS_DIR / "trained_encoder_20_epochs.npy"
 # Index Save/Load Path
@@ -46,16 +46,16 @@ QUERY_EMBEDDINGS = EMBEDDINGS_DIR / "trained_encoder_20_epochs_query_embeddings.
 # Train Save Path
 MODEL_SAVE_DIR = MODEL_WEIGHTS_DIR / f"{today.month}-{today.day}"
 MODEL_SAVE_DIR.mkdir(parents=True, exist_ok=True)
-MODEL_SAVE_PATH = MODEL_SAVE_DIR / "coffee_model_epoch_"
+MODEL_SAVE_PATH = MODEL_SAVE_DIR / "coffee_model_minilm_epoch_"
 
 # MODEL HYPERPARAMS
 TRAIN_PARAMS = {
-    "batch_size": 32,
+    "batch_size": 128,
     "semi_hard_mining_start_epoch": -1,
     "margin": 0.2,
     
     # stage 1: Warm-up (Freeze Transformer, train head)
-    "warmup_epochs": 3,
+    "warmup_epochs": 0,
     "warmup_head_lr": 1e-3,
 
     # stage 2: Unfreeze transformer, train all layers
@@ -66,7 +66,7 @@ TRAIN_PARAMS = {
 
 MODEL_PARAMS = {
     "numerical_dim": 10,
-    "embedding_dim": 768, #384, 
+    "embedding_dim": 384,#768, #384, 
     "encoder_only": True,
     "fc_dropout": 0.1,
     "all_dropout": 0.2,

@@ -4,7 +4,7 @@ import pandas as pd
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.optim import AdamW
+from torch.optim import AdamW, lr_scheduler
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from src.models.utils import CoffeeDataset, TripleTrainingDataset, collate
@@ -47,6 +47,12 @@ def train(device, num_epochs=TRAIN_PARAMS["num_epochs"], head_lr=TRAIN_PARAMS["h
         collate_fn=lambda batch: collate(batch, full_coffee_dataset)
     )
 
+    steps_per_epoch = len(train_loader)
+    total_steps = num_epochs * steps_per_epoch
+    if total_steps == 0:
+        print("Warning: num_epochs is 0, training stage will be skipped.")
+        return None, {}
+
     model = load_model(
         vocabs=vocabs,
         weights_path=model_path,
@@ -81,6 +87,12 @@ def train(device, num_epochs=TRAIN_PARAMS["num_epochs"], head_lr=TRAIN_PARAMS["h
         {"params": transformer_params, "lr": current_transformer_lr},
         {"params": head_params, "lr": current_head_lr}
     ])
+    
+    scheduler = lr_scheduler.OneCycleLR(
+        optimizer,
+        max_lr=[transformer_lr, head_lr],
+        total_steps=total_steps,
+    )
 
     print("Starting training...")
     loss_info = {
@@ -175,6 +187,7 @@ def train(device, num_epochs=TRAIN_PARAMS["num_epochs"], head_lr=TRAIN_PARAMS["h
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
+            scheduler.step()
 
             total_loss += loss.item()
 
@@ -198,8 +211,6 @@ def train(device, num_epochs=TRAIN_PARAMS["num_epochs"], head_lr=TRAIN_PARAMS["h
 if __name__ == "__main__":
     DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-
-
     warmup_model_path, warmup_loss_info = train(
         device=DEVICE, 
         num_epochs=TRAIN_PARAMS["warmup_epochs"],
@@ -211,7 +222,7 @@ if __name__ == "__main__":
     final_model_path, finetune_loss_info = train(
         device=DEVICE,
         num_epochs=TRAIN_PARAMS["num_epochs"],
-        haed_lr=TRAIN_PARAMS["head_lr"],
+        head_lr=TRAIN_PARAMS["head_lr"],
         transformer_lr=TRAIN_PARAMS["transformer_lr"],
         freeze_transformer=False,
         model_path=warmup_model_path,
