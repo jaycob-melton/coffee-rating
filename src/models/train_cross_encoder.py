@@ -1,12 +1,13 @@
 import pandas as pd
 import torch
+import json
 import random
 from torch.nn import MSELoss, BCEWithLogitsLoss
 from torch.optim import AdamW, lr_scheduler
 from torch.utils.data import DataLoader, Subset
 from tqdm import tqdm
 from transformers import AutoTokenizer, get_linear_schedule_with_warmup
-from src.config import CROSS_ENCODER_DATASET, CE_ARCHITECTURE, CE_TRAIN_PARAMS, MODEL_SAVE_PATH
+from src.config import CROSS_ENCODER_DATASET, CE_ARCHITECTURE, CE_TRAIN_PARAMS, MODEL_SAVE_PATH, CROSS_ENCODER_TEST_QUERIES
 from src.models.evaluate import calculate_relevance, calculate_ndcg, build_relevance_ground_truth
 from src.models.model_utils import load_vocabs, load_cross_encoder
 from src.models.utils import CrossEncoderDataset, CrossEncoderCollater
@@ -119,27 +120,25 @@ def train(train_dataset, val_dataset):
     for epoch in range(CE_TRAIN_PARAMS["num_epochs"]):
         model.train()
         total_loss = 0.0
-        accumulation_steps = 4
-        i = 0
         for inputs, labels in tqdm(train_loader, desc=f"Epoch {epoch+1}/{CE_TRAIN_PARAMS['num_epochs']}"):
             input_ids = inputs["input_ids"].to(device)
             attention_mask = inputs["attention_mask"].to(device)
             labels = labels.to(device)
             
+            optimizer.zero_grad()
+
             outputs = model(input_ids=input_ids, attention_mask=attention_mask)
             logits = outputs.squeeze(-1)
             
             loss = loss_fn(logits, labels)
-            loss = loss / accumulation_steps
+
             loss.backward()
 
-            if (i + 1) % accumulation_steps == 0:
-                optimizer.step()
-                scheduler.step()
-                optimizer.zero_grad()
+            optimizer.step()
+            scheduler.step()
+                
             
             total_loss += loss.item()
-            i += 1
 
         avg_train_loss = total_loss / len(train_loader)
         avg_val_loss = validate(model, val_loader, device, loss_fn)
@@ -158,5 +157,12 @@ if __name__ == "__main__":
     dataset = CrossEncoderDataset(data_path=str(CROSS_ENCODER_DATASET))
     print("Loaded Dataset Successfully")
     train_dataset, val_dataset = train_test_split(dataset, val_ratio=0.1)
+    recovered_test_queries = set()
+    for idx in val_dataset.indices:
+        recovered_test_queries.add(dataset.pairs[idx]['query'])
+
+    with open(CROSS_ENCODER_TEST_QUERIES, "w") as f:
+        json.dump(list(recovered_test_queries), f)
+        
     print("Performed Train-Val Split Successfully")
     train(train_dataset, val_dataset)

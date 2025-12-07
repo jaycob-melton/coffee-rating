@@ -258,6 +258,7 @@ def build_cross_encoder_dataset(num_search=50, num_positives=5, num_negatives=3)
         
         
         positives = []
+        positives_idx = set()
         negatives = []
         for coffee_idx in top_k_indices:
             coffee_row = coffee_data.iloc[coffee_idx]
@@ -265,6 +266,7 @@ def build_cross_encoder_dataset(num_search=50, num_positives=5, num_negatives=3)
             if rel_score > 0:
                 positives.append({
                     "query": query_text,
+                    "positive_idx": coffee_idx,
                     "coffee_text": coffee_row["combined_text"],
                     "label": rel_score
                 })
@@ -276,7 +278,8 @@ def build_cross_encoder_dataset(num_search=50, num_positives=5, num_negatives=3)
                 })
         
         final_positives = random.sample(positives, min(len(positives), num_positives))
-        if true_idx not in final_positives:
+        # Fix: final_positives is a list of dictionaries, this does not work
+        if true_idx not in [p["positive_idx"] for p in final_positives]:
             training_samples.append({
                 "query": query_text,
                 "coffee_text": coffee_data.iloc[true_idx]["combined_text"],
@@ -310,6 +313,41 @@ def load_cross_encoder(model_arch_path=CE_ARCHITECTURE, weights_path=CE_WEIGHTS,
         print("Cross-Encoder model set to training mode.")
         
     return model
+
+
+def predict_hybrid(query, dual_encoder, cross_encoder, faiss_index, coffee_df, initial_k=50, final_k=10):
+    device = next(dual_encoder.parameters()).device
+    # Stage 1: Dual Encoder Retrieval
+    with torch.no_grad():
+        # Encode query with dual encoder
+        query_emb = dual_encoder.encode_queries([query]).cpu().numpy()
+        faiss.normalize_L2(query_emb)
+        
+        # Initial retrieval with dual encoder
+        _, top_k_indices = faiss_index.search(query_emb, k=initial_k)
+        candidate_indices = top_k_indices[0]
+    
+    candidates_df = coffee_df.iloc[candidate_indices].copy()
+    
+    # Stage 2: Cross Encoder Re-ranking
+    queries = [query] * len(candidates_df)
+    coffee_texts = candidates_df["combined_text"].tolist()
+
+    with torch.no_grad():
+        relevance_scores = cross_encoder.predict(queries, coffee_texts)
+        relevance_scores = relevance_scores.squeeze().cpu().numpy()
+    
+    sorted_scores_indices = np.argsort(-relevance_scores)
+    final_k_indices = sorted_scores_indices[:final_k]
+    
+    final_candidates = candidates_df.iloc[final_k_indices]
+
+    final_candidates["relevance_score"] = relevance_scores[final_k_indices]
+
+    return final_candidates
+
+
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Flag for building embeddings or search index")

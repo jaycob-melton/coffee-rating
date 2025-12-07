@@ -126,8 +126,8 @@ class CrossEncoder(nn.Module):
         
         self.classifier = nn.Linear(self.transformer.config.hidden_size, 1)
         
-    def forward(self, input_ids, attention_mask):
-        outputs = self.transformer(input_ids=input_ids, attention_mask=attention_mask)
+    def forward(self, input_ids, attention_mask, **kwargs):
+        outputs = self.transformer(input_ids=input_ids, attention_mask=attention_mask, **kwargs)
         
         cls_embeddings = outputs.pooler_output
         logit = self.classifier(cls_embeddings)
@@ -146,5 +146,5 @@ class CrossEncoder(nn.Module):
         inputs = {k: v.to(device) for k, v in inputs.items()}
         
         with torch.no_grad():
-            logits = self.transformer(**inputs)
+            logits = self.forward(**inputs)
         return logits

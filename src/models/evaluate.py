@@ -11,7 +11,7 @@ import argparse
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from functools import partial
 from src.models.utils import CoffeeDataset
-from src.models.model_utils import load_vocabs, load_model, build_embeddings, build_search_index
+from src.models.model_utils import load_vocabs, load_model, load_cross_encoder, calculate_relevance
 from src.config import (
     QUERIES_PATH, 
     SBERT_MODEL_DIR, 
@@ -26,7 +26,8 @@ from src.config import (
     FLAVORS,
     VARIETALS,
     PROCESS,
-    QUERY_EMBEDDINGS
+    QUERY_EMBEDDINGS,
+    CROSS_ENCODER_TEST_QUERIES
 )
 
 universal_origins = set(json.loads(open(ORIGINS).read()))
@@ -64,93 +65,93 @@ ATTRIBUTE_WEIGHTS = {
     'test_method': 1
 }
 
-def calculate_relevance(query: str, coffee_row: pd.Series) -> int:
+# def calculate_relevance(query: str, coffee_row: pd.Series) -> int:
 
-    # universal_origins = set(json.loads(open("data/universal/known_origins.json").read()))
-    # universal_flavors = dict(json.loads(open("data/universal/flavor_keywords.json").read()))
-    # universal_varietals = list(json.loads(open("data/universal/coffee_varietals.json").read()))
-    # universal_processes = dict(json.loads(open("data/universal/process_keywords.json").read()))
+#     # universal_origins = set(json.loads(open("data/universal/known_origins.json").read()))
+#     # universal_flavors = dict(json.loads(open("data/universal/flavor_keywords.json").read()))
+#     # universal_varietals = list(json.loads(open("data/universal/coffee_varietals.json").read()))
+#     # universal_processes = dict(json.loads(open("data/universal/process_keywords.json").read()))
 
-    # universal_set = {
-    #     "origin": universal_origins,
-    #     "flavor": {flavor.lower() for flavor in universal_flavors.keys()},
-    #     "notes": {note.lower() for flavor in universal_flavors.values() for note in flavor},
-    #     "varietal": universal_varietals,
-    #     "process": {proc.lower() for proc in universal_processes.keys()}.union({process_name for process in universal_processes.values() for process_name in process}),
-    #     "roast": {"light", "medium-light", "medium", "medium-dark", "dark"},
-    #     "test_method": {"hot_black", "espresso_with_milk", "espresso_black", "cold_with_milk", "hot_with_milk", "cold_black"},
-    # }
+#     # universal_set = {
+#     #     "origin": universal_origins,
+#     #     "flavor": {flavor.lower() for flavor in universal_flavors.keys()},
+#     #     "notes": {note.lower() for flavor in universal_flavors.values() for note in flavor},
+#     #     "varietal": universal_varietals,
+#     #     "process": {proc.lower() for proc in universal_processes.keys()}.union({process_name for process in universal_processes.values() for process_name in process}),
+#     #     "roast": {"light", "medium-light", "medium", "medium-dark", "dark"},
+#     #     "test_method": {"hot_black", "espresso_with_milk", "espresso_black", "cold_with_milk", "hot_with_milk", "cold_black"},
+#     # }
 
-    query = query.lower()
-
-    
-    query_attributes = {}
-    total_possible_score = 0
-    
-    for attr_type, keywords in UNIVERSAL_SET.items():
-        found_keywords = {kw for kw in keywords if re.search(r'\b' + re.escape(kw) + r'\b', query)}
-        if found_keywords:
-            query_attributes[attr_type] = found_keywords
-            if attr_type == "notes":
-                total_possible_score += ATTRIBUTE_WEIGHTS[attr_type] * len(found_keywords) * 2
-            else:
-                total_possible_score += ATTRIBUTE_WEIGHTS[attr_type] * len(found_keywords)
-
-    if total_possible_score == 0:
-        return 0 # The query is too generic to be scored
+#     query = query.lower()
 
     
-    achieved_score = 0
+#     query_attributes = {}
+#     total_possible_score = 0
     
-    try:
-        coffee_origins = {o.lower() for o in ast.literal_eval(coffee_row.get('countries_extracted', '[]'))}
-        coffee_processes = {p.lower() for p in ast.literal_eval(coffee_row.get('process', '[]'))}
-        coffee_varietals = {v.lower() for v in ast.literal_eval(coffee_row.get('varietals', '[]'))}
-        flavor_profile = ast.literal_eval(coffee_row.get('flavor_profile', '{}'))
-        coffee_flavors = {f.lower() for f in flavor_profile.keys()}
-        coffee_notes = {note.lower() for notes in flavor_profile.values() for note in notes}
-        coffee_roast = {str(coffee_row.get('roast level', '')).lower()}
-        coffee_test_method = {str(coffee_row.get('test_method', '')).lower()}
-    except:
-        return 0 
+#     for attr_type, keywords in UNIVERSAL_SET.items():
+#         found_keywords = {kw for kw in keywords if re.search(r'\b' + re.escape(kw) + r'\b', query)}
+#         if found_keywords:
+#             query_attributes[attr_type] = found_keywords
+#             if attr_type == "notes":
+#                 total_possible_score += ATTRIBUTE_WEIGHTS[attr_type] * len(found_keywords) * 2
+#             else:
+#                 total_possible_score += ATTRIBUTE_WEIGHTS[attr_type] * len(found_keywords)
 
-    coffee_attributes = {
-        'origin': coffee_origins,
-        'process': coffee_processes,
-        'varietal': coffee_varietals,
-        'flavor': coffee_flavors,
-        "notes": coffee_notes,
-        'roast': coffee_roast,
-        'test_method': coffee_test_method
-    }
+#     if total_possible_score == 0:
+#         return 0 # The query is too generic to be scored
+
     
-    note_to_flavor_category = {note.lower(): category.lower() for category, notes in universal_flavors.items() for note in notes}
-    coffee_notes_set = coffee_attributes.get('notes', set())
-    coffee_notes_categories = {note_to_flavor_category.get(note) for note in coffee_notes_set if note_to_flavor_category.get(note)}
+#     achieved_score = 0
+    
+#     try:
+#         coffee_origins = {o.lower() for o in ast.literal_eval(coffee_row.get('countries_extracted', '[]'))}
+#         coffee_processes = {p.lower() for p in ast.literal_eval(coffee_row.get('process', '[]'))}
+#         coffee_varietals = {v.lower() for v in ast.literal_eval(coffee_row.get('varietals', '[]'))}
+#         flavor_profile = ast.literal_eval(coffee_row.get('flavor_profile', '{}'))
+#         coffee_flavors = {f.lower() for f in flavor_profile.keys()}
+#         coffee_notes = {note.lower() for notes in flavor_profile.values() for note in notes}
+#         coffee_roast = {str(coffee_row.get('roast level', '')).lower()}
+#         coffee_test_method = {str(coffee_row.get('test_method', '')).lower()}
+#     except:
+#         return 0 
 
-    for attr_type, query_values in query_attributes.items():
-        if attr_type == "notes":
-            for query_note in query_values:
-                note_score = 0
-                if query_note in coffee_notes_set:
-                    note_score = 2  # Exact match (category match is implied)
-                else:
-                    query_note_category = note_to_flavor_category.get(query_note)
-                    if query_note_category and query_note_category in coffee_notes_categories:
-                        note_score = 1  # Category match only
-                achieved_score += ATTRIBUTE_WEIGHTS[attr_type] * note_score
-        else:
-            matches = query_values.intersection(coffee_attributes.get(attr_type, set()))
-            achieved_score += ATTRIBUTE_WEIGHTS[attr_type] * len(matches)
+#     coffee_attributes = {
+#         'origin': coffee_origins,
+#         'process': coffee_processes,
+#         'varietal': coffee_varietals,
+#         'flavor': coffee_flavors,
+#         "notes": coffee_notes,
+#         'roast': coffee_roast,
+#         'test_method': coffee_test_method
+#     }
+    
+#     note_to_flavor_category = {note.lower(): category.lower() for category, notes in universal_flavors.items() for note in notes}
+#     coffee_notes_set = coffee_attributes.get('notes', set())
+#     coffee_notes_categories = {note_to_flavor_category.get(note) for note in coffee_notes_set if note_to_flavor_category.get(note)}
+
+#     for attr_type, query_values in query_attributes.items():
+#         if attr_type == "notes":
+#             for query_note in query_values:
+#                 note_score = 0
+#                 if query_note in coffee_notes_set:
+#                     note_score = 2  # Exact match (category match is implied)
+#                 else:
+#                     query_note_category = note_to_flavor_category.get(query_note)
+#                     if query_note_category and query_note_category in coffee_notes_categories:
+#                         note_score = 1  # Category match only
+#                 achieved_score += ATTRIBUTE_WEIGHTS[attr_type] * note_score
+#         else:
+#             matches = query_values.intersection(coffee_attributes.get(attr_type, set()))
+#             achieved_score += ATTRIBUTE_WEIGHTS[attr_type] * len(matches)
         
     
-    match_percentage = achieved_score / total_possible_score if total_possible_score > 0 else 0
+#     match_percentage = achieved_score / total_possible_score if total_possible_score > 0 else 0
     
-    if match_percentage >= 0.99: return 4 # Perfect
-    if match_percentage >= 0.75: return 3 # High
-    if match_percentage >= 0.50: return 2 # Medium
-    if match_percentage > 0: return 1   # 
-    return 0
+#     if match_percentage >= 0.99: return 4 # Perfect
+#     if match_percentage >= 0.75: return 3 # High
+#     if match_percentage >= 0.50: return 2 # Medium
+#     if match_percentage > 0: return 1   # 
+#     return 0
 
 def process_single_query(query, df, threshold=1):
     """
@@ -271,6 +272,7 @@ def evaluate(model, test_df, vocabs, training_data_path, device, precomputed_ind
     test_pair_truth = []
     test_id2idx = {cid: i for i, cid in test_df["id"].items()}
 
+    
     with open(training_data_path, "r") as f:
         for line in f:
             data=json.loads(line)
@@ -391,6 +393,81 @@ def evaluate(model, test_df, vocabs, training_data_path, device, precomputed_ind
     return hits_at_1, hits_at_5, hits_at_10, precision_10, precision_10_mid, precision_10_strict, precision_10_perfect, ndcg_10
 
 
+def evaluate_hybrid(dual_encoder, cross_encoder, test_df, vocabs, training_data_path, device, precomputed_index_path=FAISS_INDEX_PATH, query_cache=QUERY_EMBEDDINGS):
+
+    index = faiss.read_index(str(precomputed_index_path))
+    print("Loading test queries...")
+    test_queries = []
+    test_pair_truth = []
+    test_id2idx = {cid: i for i, cid in test_df["id"].items()}
+
+    with open(CROSS_ENCODER_TEST_QUERIES, "r") as f:
+        recovered_test_queries = set(json.load(f))
+
+    with open(training_data_path, "r") as f:
+        for line in f:
+            data=json.loads(line)
+            if data["coffee_id"] in test_id2idx:
+                correct_idx = test_id2idx[data["coffee_id"]]
+                for query in data["queries"]:
+                    if query in recovered_test_queries:
+                        test_queries.append(query)
+                        test_pair_truth.append(correct_idx)
+    
+    total_queries = len(test_queries)
+
+    if os.path.exists(query_cache):
+        print("Loading cached query embeddings from temp_query_embeddings.npy...")
+        query_emb_mat = np.load(query_cache)
+    else:
+        print("Error: Query cache not found. Please run Dual Encoder eval to generate it.")
+        return
+    
+    print("Stage 1: Retrieving 50 candidates per query using Dual Encoder...")
+    _, top_50_indices_batch = index.search(query_emb_mat, k=50)
+    hits_at_1 = 0
+    hits_at_5 = 0
+    hits_at_10 = 0
+    ndcg_10_scores = []
+    precision_10_scores = []
+
+    print("Stage 2: Reranking candidates using Cross Encoder...")
+
+    for i in tqdm(range(total_queries), desc="Calculating Evaluation Metrics"):
+        query = test_queries[i]
+        correct_idx = test_pair_truth[i]
+        top_50_indices = top_50_indices_batch[i]
+        
+        candidates_df = test_df.iloc[top_50_indices]
+        coffee_texts = candidates_df["combined_text"].tolist()
+        queries = [query] * len(coffee_texts)
+
+        with torch.no_grad():
+            scores = cross_encoder.predict(queries, coffee_texts)
+            scores = scores.squeeze().cpu().numpy()
+        
+        sorted_indices = np.argsort(-scores)
+        top_10_indices = top_50_indices[sorted_indices[:10]]
+
+        if correct_idx in top_10_indices[:1]:
+            hits_at_1 += 1
+        if correct_idx in top_10_indices[:5]:
+            hits_at_5 += 1
+        if correct_idx in top_10_indices[:10]:
+            hits_at_10 += 1
+
+        relevance_scores = [calculate_relevance(query, test_df.iloc[j]) for j in top_10_indices]
+
+        ndcg_10_scores.append(calculate_ndcg(relevance_scores, k=10))
+        precision_10_scores.append(np.sum(np.array(relevance_scores) >= 1) / 10.0)
+
+    print("\n--- Hybrid Evaluation Results ---")
+    print(f"Hits@1:  {hits_at_1/total_queries:.4f}")
+    print(f"Hits@10: {hits_at_10/total_queries:.4f}")
+    print(f"NDCG@10: {np.mean(ndcg_10_scores):.4f}")
+    print(f"Prec@10: {np.mean(precision_10_scores):.4f}")
+
+
 if __name__ == "__main__":
 
     # def check_valid(value):
@@ -410,20 +487,37 @@ if __name__ == "__main__":
     
     # args = parser.parse_args()
     
+    # DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    # print("Device:", DEVICE)
+    # print("Loading Coffee Data...")
+    # df = pd.read_csv(PREPROCESSED_DATA_PATH)
+    
+    # # model, vocabs = load_model_inference(TRAINED_MODEL_PATH, numerical_dim=10, device=DEVICE, model_location=SBERT_MODEL_DIR)
+    # vocabs = load_vocabs(VOCABS_PATH)
+    # model = load_model(
+    #     vocabs=vocabs,
+    #     device=DEVICE,
+    #     eval=True
+    # )
+    # evaluate(model, df, vocabs, QUERIES_PATH, DEVICE, FAISS_INDEX_PATH)
+
+    # if DEVICE.type == "cuda":
+    #     del model
+    #     torch.cuda.empty_cache()
+
     DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print("Device:", DEVICE)
     print("Loading Coffee Data...")
     df = pd.read_csv(PREPROCESSED_DATA_PATH)
-    
-    # model, vocabs = load_model_inference(TRAINED_MODEL_PATH, numerical_dim=10, device=DEVICE, model_location=SBERT_MODEL_DIR)
     vocabs = load_vocabs(VOCABS_PATH)
-    model = load_model(
+    dual_encoder = load_model(
         vocabs=vocabs,
         device=DEVICE,
         eval=True
     )
-    evaluate(model, df, vocabs, QUERIES_PATH, DEVICE, FAISS_INDEX_PATH)
+    cross_encoder = load_cross_encoder(
+        device=DEVICE,
+        eval=True
+    )
 
-    if DEVICE.type == "cuda":
-        del model
-        torch.cuda.empty_cache()
+    evaluate_hybrid(dual_encoder, cross_encoder, df, vocabs, QUERIES_PATH, DEVICE, FAISS_INDEX_PATH)

@@ -31,6 +31,7 @@ FLAVORS = UNI_DIR / "flavor_keywords.json"
 ORIGINS = UNI_DIR / "known_origins.json"
 PROCESS = UNI_DIR / "process_keywords.json"
 CROSS_ENCODER_DATASET = PROCESSED_DIR / "cross_encoder_dataset.jsonl"
+CROSS_ENCODER_TEST_QUERIES = PROCESSED_DIR / "cross_encoder_test_queries.json"
 
 # Model
 
@@ -50,7 +51,7 @@ MODEL_SAVE_DIR.mkdir(parents=True, exist_ok=True)
 MODEL_SAVE_PATH = MODEL_SAVE_DIR / "cross_encoder_minilm_epoch_"
 
 CE_ARCHITECTURE = MODELS_DIR / "MiniLM-L6-v2" 
-CE_WEIGHTS = None
+CE_WEIGHTS = MODEL_WEIGHTS_DIR / "12-7" / "cross_encoder_minilm_epoch__10.pth"
 
 # MODEL HYPERPARAMS
 TRAIN_PARAMS = {
