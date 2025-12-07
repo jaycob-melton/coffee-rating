@@ -7,7 +7,7 @@ import torch.nn.functional as F
 from torch.optim import AdamW, lr_scheduler
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-from src.models.utils import CoffeeDataset, TripleTrainingDataset, collate
+from src.models.utils import CoffeeDataset, TripletTrainingDataset, collate
 # from src.models.model import DualEncoder
 from src.models.model_utils import load_vocabs, load_model
 from src.config import (
@@ -37,7 +37,7 @@ def train(device, num_epochs=TRAIN_PARAMS["num_epochs"], head_lr=TRAIN_PARAMS["h
     full_coffee_dataset = CoffeeDataset(df, vocabs)
 
     # provides thje (query, positive_idx) pairs for training
-    train_dataset = TripleTrainingDataset(str(QUERIES_PATH), df)
+    train_dataset = TripletTrainingDataset(str(QUERIES_PATH), df)
 
 
     train_loader = DataLoader(

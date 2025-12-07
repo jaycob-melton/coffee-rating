@@ -126,9 +126,15 @@ class CrossEncoder(nn.Module):
         
         self.classifier = nn.Linear(self.transformer.config.hidden_size, 1)
         
-    def forward(self, queries, coffees, max_length=256):
-        device = next(self.parameters()).device
+    def forward(self, input_ids, attention_mask):
+        outputs = self.transformer(input_ids=input_ids, attention_mask=attention_mask)
         
+        cls_embeddings = outputs.pooler_output
+        logit = self.classifier(cls_embeddings)
+        return logit
+    
+    def predict(self, queries, coffees, max_length=256):
+        device = next(self.parameters()).device
         inputs = self.tokenizer(
             queries, 
             coffees,
@@ -139,10 +145,6 @@ class CrossEncoder(nn.Module):
         )
         inputs = {k: v.to(device) for k, v in inputs.items()}
         
-        outputs = self.transformer(**inputs)
-        
-        cls_embedding = outputs.pooler_output
-        
-        score_logit = self.classifier(cls_embedding)
-        
-        return score_logit
+        with torch.no_grad():
+            logits = self.transformer(**inputs)
+        return logits

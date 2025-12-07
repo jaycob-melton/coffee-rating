@@ -1,8 +1,13 @@
+import encodings
 import pandas as pd
 import ast
 import json
 import torch
+import faiss
 from torch.utils.data import Dataset
+from src.models.model import DualEncoder
+
+
 
 def to_list(x):
     if isinstance(x, list):
@@ -91,7 +96,7 @@ class CoffeeDataset(Dataset):
         return text, numerical_features, cat_features
     
 
-class TripleTrainingDataset(Dataset):
+class TripletTrainingDataset(Dataset):
     def __init__(self, training_data_path: str, coffee_df: pd.DataFrame):
         self.coffee_df = coffee_df
         self.queries = []
@@ -156,3 +161,56 @@ def collate(batch, coffee_dataset: CoffeeDataset):
             positive_coffee_batch["categoricals"][col] = torch.tensor(val[:-1], dtype=torch.long)
 
     return queries, positive_indices, positive_coffee_batch
+
+
+class CrossEncoderDataset(Dataset):
+    def __init__(self, data_path):
+        """
+        Docstring for __init__
+        :param data_path: Path to the JSONL file containing training pairs
+        """
+        self.pairs = []
+        print(f"Loading training pairs from {data_path}...")
+        with open(data_path, "r") as f:
+            for line in f:
+                data = json.loads(line)
+                self.pairs.append(data)
+        print(f"Loaded {len(self.pairs)} training samples.")
+                          
+    def __len__(self):
+        return len(self.pairs)
+    
+    def __getitem__(self, idx):
+        item = self.pairs[idx]
+        return {
+            "query": item["query"],
+            "coffee_text": item["coffee_text"],
+            "label": item["label"]
+        }
+
+
+class CrossEncoderCollater:
+    def __init__(self, tokenizer, max_length=256):
+        self.tokenizer = tokenizer
+        self.max_length = max_length
+    
+    def __call__(self, batch):
+        """
+        Docstring for __call__
+        
+        :param batch: list of dicts
+        """
+        queries = [item["query"] for item in batch]
+        coffee_texts = [item["coffee_text"] for item in batch]
+        labels = torch.tensor([item["label"] for item in batch], dtype=torch.float)
+
+        tokenized = self.tokenizer(
+            queries,
+            coffee_texts,
+            padding=True,
+            truncation=True,
+            max_length=self.max_length,
+            return_tensors="pt"
+        )
+    
+        return tokenized, labels       
