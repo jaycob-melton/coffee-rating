@@ -148,7 +148,7 @@ def train(train_dataset, val_dataset):
         if avg_val_loss < best_val_loss:
             print(f"  Validation loss improved ({best_val_loss:.4f} -> {avg_val_loss:.4f}). Saving model...")
             best_val_loss = avg_val_loss
-            torch.save(model.state_dict(), MODEL_SAVE_PATH + f"{epoch+1}.pth")
+            torch.save(model.state_dict(), f"{MODEL_SAVE_PATH}_{epoch+1}.pth")
         else:
             print(f"  Validation loss did not improve (Best: {best_val_loss:.4f}).")
       
