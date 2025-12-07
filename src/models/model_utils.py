@@ -1,4 +1,5 @@
 import json
+import random
 from turtle import pd
 import torch
 import pandas as pd
@@ -7,7 +8,7 @@ import ast
 import numpy as np
 import faiss
 from tqdm import tqdm
-from src.models.model import DualEncoder
+from src.models.model import DualEncoder, CrossEncoder
 from src.models.utils import CoffeeDataset
 from src.config import (
     CROSS_ENCODER_DATASET,
@@ -225,7 +226,7 @@ def calculate_relevance(query: str, coffee_row) -> int:
     return 0
 
 
-def build_cross_encoder_dataset(num_search=50, num_negatives=10):
+def build_cross_encoder_dataset(num_search=50, num_positives=5, num_negatives=3):
     
     # Goal: create coffee pairs for each query, at most 10 negatives and the rest positives.
     # load in query embeddings and coffee index
@@ -256,32 +257,33 @@ def build_cross_encoder_dataset(num_search=50, num_negatives=10):
         top_k_indices = topkmat[i]  # Indices of top 50 coffees for this query
         
         
-        positives = set()
-        negatives = 0
+        positives = []
+        negatives = []
         for coffee_idx in top_k_indices:
             coffee_row = coffee_data.iloc[coffee_idx]
             rel_score = calculate_relevance(query_text, coffee_row) / 4.0
             if rel_score > 0:
-                training_samples.append({
+                positives.append({
                     "query": query_text,
                     "coffee_text": coffee_row["combined_text"],
                     "label": rel_score
                 })
-                positives.add(coffee_idx)
-            elif negatives < num_negatives:
-                training_samples.append({
+            elif len(negatives) < num_negatives:
+                negatives.append({
                     "query": query_text,
                     "coffee_text": coffee_row["combined_text"],
                     "label": 0.0
                 })
-                negatives += 1
         
-        if true_idx not in positives:
+        final_positives = random.sample(positives, min(len(positives), num_positives))
+        if true_idx not in final_positives:
             training_samples.append({
                 "query": query_text,
                 "coffee_text": coffee_data.iloc[true_idx]["combined_text"],
                 "label": 1.0
             })
+        training_samples.extend(final_positives)
+        training_samples.extend(negatives)
     
     print(f"Saving {len(training_samples)} training samples to {CROSS_ENCODER_DATASET}...")
     with open(CROSS_ENCODER_DATASET, "w") as f:
@@ -290,7 +292,7 @@ def build_cross_encoder_dataset(num_search=50, num_negatives=10):
         
         
 def load_cross_encoder(model_arch_path=CE_ARCHITECTURE, weights_path=CE_WEIGHTS, device=torch.device("cpu"), eval=False):
-    from sentence_transformers import CrossEncoder
+    
     model = CrossEncoder(model_arch_path)
     if weights_path:
         state_dict = torch.load(weights_path, map_location=device, weights_only=True)

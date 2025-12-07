@@ -114,26 +114,33 @@ def train(train_dataset, val_dataset):
     
     loss_fn = MSELoss()
     
+    best_val_loss = float("inf")
+
     for epoch in range(CE_TRAIN_PARAMS["num_epochs"]):
         model.train()
         total_loss = 0.0
+        accumulation_steps = 4
+        i = 0
         for inputs, labels in tqdm(train_loader, desc=f"Epoch {epoch+1}/{CE_TRAIN_PARAMS['num_epochs']}"):
             input_ids = inputs["input_ids"].to(device)
             attention_mask = inputs["attention_mask"].to(device)
             labels = labels.to(device)
             
-            optimizer.zero_grad()
-            
             outputs = model(input_ids=input_ids, attention_mask=attention_mask)
             logits = outputs.squeeze(-1)
             
             loss = loss_fn(logits, labels)
+            loss = loss / accumulation_steps
             loss.backward()
-            optimizer.step()
-            scheduler.step()
+
+            if (i + 1) % accumulation_steps == 0:
+                optimizer.step()
+                scheduler.step()
+                optimizer.zero_grad()
             
             total_loss += loss.item()
-        
+            i += 1
+
         avg_train_loss = total_loss / len(train_loader)
         avg_val_loss = validate(model, val_loader, device, loss_fn)
         

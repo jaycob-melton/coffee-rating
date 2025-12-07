@@ -47,9 +47,9 @@ QUERY_EMBEDDINGS = EMBEDDINGS_DIR / "coffee_model_minilm_fulltext_epoch_finetune
 # Train Save Path
 MODEL_SAVE_DIR = MODEL_WEIGHTS_DIR / f"{today.month}-{today.day}"
 MODEL_SAVE_DIR.mkdir(parents=True, exist_ok=True)
-MODEL_SAVE_PATH = MODEL_SAVE_DIR / "cross_encoder_sbert_epoch_"
+MODEL_SAVE_PATH = MODEL_SAVE_DIR / "cross_encoder_minilm_epoch_"
 
-CE_ARCHITECTURE = MODELS_DIR / "sbert_model"
+CE_ARCHITECTURE = MODELS_DIR / "MiniLM-L6-v2" 
 CE_WEIGHTS = None
 
 # MODEL HYPERPARAMS
@@ -77,7 +77,7 @@ MODEL_PARAMS = {
 }
 
 CE_TRAIN_PARAMS = {
-    "batch_size": 32,
+    "batch_size": 128,
     "num_epochs": 10,
     "lr": 1e-5,
 }
