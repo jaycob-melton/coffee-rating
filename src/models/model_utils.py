@@ -1,6 +1,5 @@
 import json
 import random
-from turtle import pd
 import torch
 import pandas as pd
 import re

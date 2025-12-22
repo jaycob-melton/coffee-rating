@@ -2,19 +2,22 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
+# RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
 
-RUN mkdir -p /app/data/processed
-RUN mkdir -p /app/data/outputs/model-weights/8-11
-RUN mkdir -p /app/data/outputs/faiss
+# RUN mkdir -p /app/
+# RUN mkdir -p /app/data/processed/
+# RUN mkdir -p /app/models/model-weights/11-24/
+# RUN mkdir -p /app/models/model-weights/12-7/
+# RUN mkdir -p /app/models/faiss/
+# RUN mkdir -p /app/models/vocabs/
 
-ARG DATA_URL="https://storage.googleapis.com/project_artifacts_67/preprocessed_data.csv"
-ARG MODEL_WEIGHTS_URL="https://storage.googleapis.com/project_artifacts_67/coffee_model_epoch_11_semi_hard_3.pth"
-ARG FAISS_URL="https://storage.googleapis.com/project_artifacts_67/faiss_index.bin"
+# ARG DATA_URL="https://storage.googleapis.com/project_artifacts_67/preprocessed_data.csv"
+# ARG MODEL_WEIGHTS_URL="https://storage.googleapis.com/project_artifacts_67/coffee_model_epoch_11_semi_hard_3.pth"
+# ARG FAISS_URL="https://storage.googleapis.com/project_artifacts_67/faiss_index.bin"
 
-RUN curl -L ${DATA_URL} -o /app/data/processed/preprocessed_data.csv
-RUN curl -L ${MODEL_WEIGHTS_URL} -o /app/data/outputs/model-weights/8-11/coffee_model_epoch_11_semi_hard_3.pth
-RUN curl -L ${FAISS_URL} -o /app/data/outputs/faiss/faiss_index.bin
+# RUN curl -L ${DATA_URL} -o /app/data/processed/preprocessed_data.csv
+# RUN curl -L ${MODEL_WEIGHTS_URL} -o /app/data/outputs/model-weights/8-11/coffee_model_epoch_11_semi_hard_3.pth
+# RUN curl -L ${FAISS_URL} -o /app/data/outputs/faiss/faiss_index.bin
 
 COPY requirements.txt .
 
@@ -27,10 +30,21 @@ COPY src/models/model.py src/models/
 COPY src/models/evaluate.py src/models/
 COPY src/models/predict.py src/models/
 COPY src/models/utils.py src/models/ 
+COPY src/models/model_utils.py src/models/
+
+COPY data/processed/preprocessed_fulltext.csv data/processed/
+COPY data/universal data/universal/
+
+COPY models/MiniLM-L6-v2/ models/MiniLM-L6-v2/
+COPY models/faiss/coffee_model_minilm_fulltext_epoch_finetune_15_index.bin models/faiss/
+COPY models/vocabs/best_model_vocabs.json models/vocabs/
+COPY models/model-weights/11-24/coffee_model_minilm_fulltext_epoch_finetune_15.pth models/model-weights/11-24/
+COPY models/model-weights/12-7/cross_encoder_minilm_epoch__10.pth models/model-weights/12-7/
 
 EXPOSE 5000
 
 ENV FLASK_APP=src.app.app
 ENV FLASK_DEBUG=1
+ENV PORT=5000
 
 CMD flask run --host=0.0.0.0 --port=$PORT --no-reload
